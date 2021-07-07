@@ -1,72 +1,102 @@
 import { BlockWalker } from "./block-walker";
-import { DbWrapper, MasterChainBlockInfo } from "./db-wrapper";
+import { BMT_IDs } from "./common-types";
+import { IDbWrapper } from "./db-wrapper";
+import { RangerConfig } from "./ranger-config";
 
 export class Ranger {
-    readonly unordered_db: DbWrapper;
-    readonly ordered_db: DbWrapper;
+    readonly buffer_db: IDbWrapper;
+    readonly ordered_db: IDbWrapper;
+    readonly start_seq_no: number;
 
-    constructor(unordered_db: DbWrapper, ordered_db: DbWrapper) {
-        this.unordered_db = unordered_db;
+    constructor(buffer_db: IDbWrapper, ordered_db: IDbWrapper) {
+        this.buffer_db = buffer_db;
         this.ordered_db = ordered_db;
+        this.start_seq_no = RangerConfig.test_mode ? 200000 : -1;
     }
 
     async run() {
-        const unordered_max_seq_no = await this.unordered_db.get_last_masterchain_block_seqno();
-        const ordered_max_seq_no = await this.ordered_db.get_last_masterchain_block_seqno();
-        console.log("Unordered max seq_no: ", unordered_max_seq_no);
-        console.log("Ordered max seq_no: ", ordered_max_seq_no);
+        await this.init_ordered_db_if_needed();
+        while (true) {
+            try {
+                await this.run_once();
+                
+                if (RangerConfig.debug)
+                    console.log(await this.ordered_db.get_last_masterchain_block_seq_no());
+            } catch (error) {
+                if (RangerConfig.debug)
+                    console.error(error);
 
-        const result = await this.get_sharchain_blocks_between_masterchain_blocks(
-            (await this.unordered_db.get_first_masterchain_block_id_with_seq_no_not_less_than(599996))!,
-            (await this.unordered_db.get_first_masterchain_block_id_with_seq_no_not_less_than(600000))!,
-            // "e8af9e89914f10e9b97167e7328cbac77e9e7f82bdb27b73c55d79fa6eb7eb98", // seq_no = 599996
-            // "b4ddac6fb5b40ea143a1751d33c994dc7ba3198cbba3f3850fd2b3623accf6dc", // seq_no = 600000
-        );
-
-        console.log(result);
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            } 
+        }
     }
 
-    private async get_shardchain_blocks_for_masterchain_block(masterchain_block: MasterChainBlockInfo, previous_masterchain_block?: MasterChainBlockInfo) {
+    async init_ordered_db_if_needed() {
+        if (await there_is_no_masterchain_blocks_in(this.ordered_db, this.start_seq_no))
+            await this.ordered_db.init_from(this.buffer_db, this.start_seq_no);
+
+        async function there_is_no_masterchain_blocks_in(db: IDbWrapper, start_seq_no: number): Promise<boolean> {
+            const masterchain_block = await db.get_first_masterchain_block_id_with_seq_no_not_less_than(start_seq_no);
+            return !masterchain_block;
+        }
+    }
+
+    async run_once() {
+        const masterchain_block_id = await this.select_next_masterchain_block_to_process();
+        const bmt_ids = await this.get_BMT_ids_tied_to_masterchain_block(masterchain_block_id);
+        await this.ensure_all_messages_and_transactions_exist(bmt_ids); // blocks should exist by design of previous line
+        await this.move_BMT_from_buffer_db_to_ordered_db(bmt_ids);
+    }
+
+    private async select_next_masterchain_block_to_process(): Promise<string> {
+        let block_id: string | undefined;
+        if (!RangerConfig.test_mode) {
+            block_id = await this.buffer_db.get_first_masterchain_block_id_with_seq_no_not_less_than(this.start_seq_no);
+        } else {
+            const last_processed_seq_no = await this.ordered_db.get_last_masterchain_block_seq_no();
+            
+            if (!last_processed_seq_no || last_processed_seq_no < this.start_seq_no)
+                throw new Error("This error should be impossible (select_next_masterchain_block_to_process)");
+
+            block_id = await this.buffer_db.get_first_masterchain_block_id_with_seq_no_not_less_than(last_processed_seq_no + 1);
+        }
+
+        if (!block_id)
+            throw new Error("There is no masterblock to process");
+
+        return block_id;
+    }
+
+    private async get_BMT_ids_tied_to_masterchain_block(masterchain_block_id: string): Promise<BMT_IDs> {
         const block_walker = new BlockWalker(
-            this.unordered_db,
-            masterchain_block,
-            previous_masterchain_block,
+            this.buffer_db,
+            this.ordered_db,
+            masterchain_block_id,
         );
         await block_walker.run();
         return block_walker.result!;
     }
 
-    private async get_sharchain_blocks_between_masterchain_blocks(left_masterchain_id: string, right_masterchain_id: string) {
-        let right_masterchain_block = await this.unordered_db.get_masterchain_block_info_by_id(right_masterchain_id);
-        if (!right_masterchain_block)
-            throw new Error(`Masterchain block with id ${right_masterchain_id} not found`);
+    private async ensure_all_messages_and_transactions_exist(bmt_ids: BMT_IDs): Promise<void> {
+        const buffer_db_message_ids = await this.buffer_db.get_existing_message_ids_from_id_array(bmt_ids.message_ids);
+        const remaining_message_ids = bmt_ids.message_ids.filter(id => buffer_db_message_ids.indexOf(id) == -1);
+        const non_existant_message_ids = await this.ordered_db.get_existing_message_ids_from_id_array(remaining_message_ids);
+        if (non_existant_message_ids.length > 0)
+            throw new Error(`Not all messages are here. Not found: ${non_existant_message_ids}`);
 
-        let left_masterchain_block = await this.unordered_db.get_masterchain_block_info_by_id(left_masterchain_id);
-        if (!left_masterchain_block)
-            throw new Error(`Masterchain block with id ${left_masterchain_id} not found`);
+        const buffer_db_transaction_ids = await this.buffer_db.get_existing_transaction_ids_from_id_array(bmt_ids.transaction_ids);
+        const remaining_transaction_ids = bmt_ids.transaction_ids.filter(id => buffer_db_transaction_ids.indexOf(id) == -1);
+        const non_existant_transaction_ids = await this.ordered_db.get_existing_transaction_ids_from_id_array(remaining_transaction_ids);
+        if (non_existant_transaction_ids.length > 0)
+            throw new Error(`Not all transactions are here. Not found: ${non_existant_transaction_ids}`);
+    }
 
-        if (left_masterchain_block.seq_no >= right_masterchain_block.seq_no)
-            throw new Error(`Expected right seq_no (${right_masterchain_block.seq_no}) to be greater than left seq_no (${left_masterchain_block.seq_no})`);
-
-        const masterchain_blocks: MasterChainBlockInfo[] = [ right_masterchain_block ];
-        while(right_masterchain_block._key != left_masterchain_block?._key) {
-            const next_right_id: string = right_masterchain_block!.prev_ref.root_hash;
-            right_masterchain_block = await this.unordered_db.get_masterchain_block_info_by_id(next_right_id);
-            if (!right_masterchain_block)
-                throw new Error(`Masterchain block with id ${next_right_id} not found`);
-
-            masterchain_blocks.unshift(right_masterchain_block);
+    private async move_BMT_from_buffer_db_to_ordered_db(bmt_ids: BMT_IDs): Promise<void> {
+        const bmt = await this.buffer_db.get_BMT_by_ids(bmt_ids);
+        await this.ordered_db.add_BMT(bmt);
+        
+        if (!RangerConfig.test_mode) {
+            await this.buffer_db.remove_BMT_by_ids(bmt_ids);
         }
-
-        const result_ids: string[] = [];
-        for (let i = 1; i < masterchain_blocks.length; i++){
-            const shardchain_block_ids = 
-                await this.get_shardchain_blocks_for_masterchain_block(masterchain_blocks[i], masterchain_blocks[i-1]);
-            
-            result_ids.push(...shardchain_block_ids);
-            result_ids.push(masterchain_blocks[i]._key);
-        }
-
-        return result_ids;
     }
 }

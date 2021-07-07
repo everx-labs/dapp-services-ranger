@@ -1,36 +1,33 @@
 import { Database, aql } from "arangojs";
 import { DocumentCollection } from "arangojs/collection";
 import { Config } from "arangojs/connection";
-import { ArrayCursor } from "arangojs/cursor";
 
-export enum Collection {
-    accounts = "accounts",
-    blocks = "blocks",
-    messages = "messages",
-    transactions = "transactions",
-    blocks_signatures = "blocks_signatures",
-    zerostates = "zerostates",
+import { BMT, BMT_IDs } from "./common-types";
+import { RangerConfig } from "./ranger-config";
+
+export interface IDbWrapper {
+    get_existing_message_ids_from_id_array(message_ids: string[]): Promise<string[]>;
+    get_existing_transaction_ids_from_id_array(transaction_ids: string[]): Promise<string[]>;
+    get_first_masterchain_block_id_with_seq_no_not_less_than(min_seq_no: number): Promise<string | undefined>;
+    get_masterchain_block_info_by_id(id: string): Promise<MasterChainBlockInfo | undefined>;
+    get_shardchain_block_info_by_id(id: string): Promise<ShardChainBlockInfo | undefined>;
+    get_last_masterchain_block_seq_no(): Promise<number | undefined>;
+    init_from(source: IDbWrapper, init_seq_no: number): Promise<void>;
+
+    add_BMT(bmt: BMT): Promise<void>;
+    get_BMT_by_ids(bmt_ids: BMT_IDs): Promise<BMT>;
+    remove_BMT_by_ids(bmt_ids: BMT_IDs): Promise<void>;
 }
 
 export type MasterChainBlockInfo = {
     _key: string;
     seq_no: number,
     gen_utime: number,
-    prev_ref: {
-        seq_no: number,
-        root_hash: string,
-    },
-    shards: ShardChainBlockRef[],
+    prev_block_id: string,
+    shard_block_ids: string[],
+    message_ids: string[],
+    transaction_ids: string[],
 };
-
-export type ShardChainBlockRef = {
-    root_hash: string,
-    seq_no: number,
-    before_split: boolean,
-    before_merge: boolean,
-    workchain_id: string,
-    shard: string,
-}
 
 export type ShardChainBlockInfo = {
     _key: string,
@@ -38,95 +35,90 @@ export type ShardChainBlockInfo = {
     workchain_id: string;
     seq_no: number,
     shard: string,
-    after_split: boolean,
-    after_merge: boolean,
-    prev_ref: {
-        seq_no: number,
-        root_hash: string,
-    },
-    prev_alt_ref: {
-        seq_no: number | null,
-        root_hash: string | null,
-    },
+    prev_block_id: string,
+    prev_alt_block_id: string | null,
+    message_ids: string[],
+    transaction_ids: string[],
 };
 
-export class DbWrapper {
-    readonly db: Database;
-    readonly blocks_collection: DocumentCollection;
-
+export class DbWrapper implements IDbWrapper {
+    readonly arango_db: Database;
+    readonly blocks: DocumentCollection;
+    readonly messages: DocumentCollection;
+    readonly transactions: DocumentCollection;
+    
     constructor(config: Config) {
-        this.db = new Database(config);
-        this.blocks_collection = this.db.collection(Collection.blocks);
+        this.arango_db = new Database(config);
+        this.blocks = this.arango_db.collection("blocks");
+        this.messages = this.arango_db.collection("messages");
+        this.transactions = this.arango_db.collection("transactions");
     }
 
-    async get_last_masterchain_block_seqno(): Promise<number> {
-        const get_last_masterchain_block_seqno = await this.db.query(aql`
-            FOR b IN ${this.blocks_collection}
-            FILTER b.workchain_id == -1
-            SORT b.seq_no DESC
-            LIMIT 1
-            RETURN b.seq_no
+    async get_existing_message_ids_from_id_array(message_ids: string[]): Promise<string[]> {
+        const query = await this.arango_db.query(aql`
+            FOR m IN ${this.messages}
+            FILTER m._key IN ${message_ids}
+            RETURN m._key
         `);
 
-        return await get_last_masterchain_block_seqno.next();
+        return await query.all();
     }
-
-    async get_last_masterchain_block_id(): Promise<string> {
-        const get_last_masterchain_block_seqno = await this.db.query(aql`
-            FOR b IN ${this.blocks_collection}
-            FILTER b.workchain_id == -1
-            SORT b.seq_no DESC
-            LIMIT 1
-            RETURN b._key
+    
+    async get_existing_transaction_ids_from_id_array(transaction_ids: string[]): Promise<string[]> {
+        const query = await this.arango_db.query(aql`
+            FOR t IN ${this.transactions}
+            FILTER t._key IN ${transaction_ids}
+            RETURN t._key
         `);
 
-        return await get_last_masterchain_block_seqno.next();
+        return await query.all();   
     }
 
-    async get_first_masterchain_block_id_with_seq_no_not_less_than(seq_no: number): Promise<string | undefined> {
-        const get_last_masterchain_block_seqno = await this.db.query(aql`
-            FOR b IN ${this.blocks_collection}
-            FILTER b.workchain_id == -1 && b.seq_no >= ${seq_no}
+    async get_first_masterchain_block_id_with_seq_no_not_less_than(min_seq_no: number): Promise<string | undefined> {
+        const query = await this.arango_db.query(aql`
+            FOR b IN ${this.blocks}
+            FILTER b.workchain_id == -1 && b.seq_no >= ${min_seq_no}
             SORT b.seq_no ASC
             LIMIT 1
             RETURN b._key
         `);
 
-        return await get_last_masterchain_block_seqno.next();
+        return await query.next();
     }
 
     async get_masterchain_block_info_by_id(id: string): Promise<MasterChainBlockInfo | undefined> {
-        const masterchain_block_query: ArrayCursor<MasterChainBlockInfo> = await this.db.query(aql`
-            FOR b IN ${this.blocks_collection}
+        const query = await this.arango_db.query(aql`
+            FOR b IN ${this.blocks}
             FILTER b.workchain_id == -1 && b._key == ${id}
             RETURN { 
                 "_key": b._key,
-                "gen_utime": b.gen_utime,
                 "seq_no": b.seq_no,
-                "prev_ref": {
-                    "seq_no": b.prev_ref.seq_no,
-                    "root_hash": b.prev_ref.root_hash,
-                },
-                "shards": (
+                "gen_utime": b.gen_utime,
+                "prev_block_id": b.prev_ref.root_hash,
+                "shard_block_ids": (
                     FOR sh IN b.master.shard_hashes
-                    RETURN {
-                        "seq_no": sh.descr.seq_no,
-                        "root_hash": sh.descr.root_hash,
-                        "workchain_id": sh.workchain_id,
-                        "shard": sh.shard,
-                        "before_split": sh.descr.before_split,
-                        "before_merge": sh.descr.before_merge,
-                    }
+                    RETURN sh.descr.root_hash
                 ),
+                "message_ids": (FOR m_id IN UNION_DISTINCT(
+                        b.out_msg_descr[*].msg_id,
+                        b.out_msg_descr[*].out_msg.msg_id,
+                        b.out_msg_descr[*].reimport.msg_id,
+                        b.in_msg_descr[*].msg_id,
+                        b.in_msg_descr[*].in_msg.msg_id
+                    ) FILTER m_id != null RETURN m_id),
+                "transaction_ids": (FOR t_id IN UNION_DISTINCT(
+                        b.out_msg_descr[*].transaction_id,
+                        b.out_msg_descr[*].reimport.transaction_id
+                    ) FILTER t_id != null RETURN t_id),
             }
         `);
 
-        return await masterchain_block_query.next();
+        return await query.next();
     }
 
     async get_shardchain_block_info_by_id(id: string): Promise<ShardChainBlockInfo | undefined> {
-        const shardchain_block_query: ArrayCursor<ShardChainBlockInfo> = await this.db.query(aql`
-            FOR b IN ${this.db.collection(Collection.blocks)}
+        const query = await this.arango_db.query(aql`
+            FOR b IN ${this.blocks}
             FILTER b._key == ${id}
             RETURN { 
                 "_key": b._key,
@@ -134,19 +126,108 @@ export class DbWrapper {
                 "workchain_id": b.workchain_id,
                 "seq_no": b.seq_no,
                 "shard": b.shard,
-                "after_merge": b.after_merge,
-                "after_split": b.after_split,
-                "prev_ref": {
-                    "seq_no": b.prev_ref.seq_no,
-                    "root_hash": b.prev_ref.root_hash,
-                },
-                "prev_alt_ref": {
-                    "seq_no": b.prev_alt_ref.seq_no,
-                    "root_hash": b.prev_alt_ref.root_hash,
-                },
+                "prev_block_id": b.prev_ref.root_hash,
+                "prev_alt_block_id": b.prev_alt_ref.root_hash,
+                "message_ids": (FOR m_id IN UNION_DISTINCT(
+                        b.out_msg_descr[*].msg_id,
+                        b.out_msg_descr[*].out_msg.msg_id,
+                        b.out_msg_descr[*].reimport.msg_id,
+                        b.in_msg_descr[*].msg_id,
+                        b.in_msg_descr[*].in_msg.msg_id
+                    ) FILTER m_id != null RETURN m_id),
+                "transaction_ids": (FOR t_id IN UNION_DISTINCT(
+                        b.out_msg_descr[*].transaction_id,
+                        b.out_msg_descr[*].reimport.transaction_id
+                    ) FILTER t_id != null RETURN t_id),
             }
         `);
 
-        return await shardchain_block_query.next();
+        return await query.next();
+    }
+
+    async get_last_masterchain_block_seq_no(): Promise<number | undefined> {
+        const query = await this.arango_db.query(aql`
+            FOR b IN ${this.blocks}
+            FILTER b.workchain_id == -1
+            SORT b.seq_no DESC
+            LIMIT 1
+            RETURN b.seq_no
+        `);
+
+        return await query.next();
+    }
+
+    async init_from(source: IDbWrapper, init_seq_no: number): Promise<void> {
+        const collections = await this.arango_db.collections();
+
+        if (!collections.find(c => c.name == "blocks"))
+            await this.arango_db.createCollection("blocks");
+        
+        if (!collections.find(c => c.name == "messages"))
+            await this.arango_db.createCollection("messages");
+        
+        if (!collections.find(c => c.name == "transactions"))
+            await this.arango_db.createCollection("transactions");
+
+        const masterchain_block_id = await source.get_first_masterchain_block_id_with_seq_no_not_less_than(init_seq_no);
+        if (!masterchain_block_id)
+            throw new Error(`There is no masterchain block with seq_no >= ${init_seq_no} to init from`);
+
+        const masterchain_block = await source.get_masterchain_block_info_by_id(masterchain_block_id);
+        const bmt_ids = {
+            block_ids: [ masterchain_block_id ],
+            message_ids: masterchain_block!.message_ids,
+            transaction_ids: masterchain_block!.transaction_ids,
+        };
+        const bmt = await source.get_BMT_by_ids(bmt_ids);
+        await this.add_BMT(bmt);
+        
+        if (!RangerConfig.test_mode) {
+            await source.remove_BMT_by_ids(bmt_ids);
+        }
+    }
+    
+    async add_BMT(bmt: BMT): Promise<void> {
+        const transaction = await this.arango_db.beginTransaction({
+            write: [ "blocks", "transactions", "messages" ],
+        });
+        await transaction.step(() => this.blocks.saveAll(bmt.blocks, { overwriteMode: "ignore" }));
+        await transaction.step(() => this.transactions.saveAll(bmt.transactions, { overwriteMode: "ignore" }));
+        await transaction.step(() => this.messages.saveAll(bmt.messages, { overwriteMode: "ignore" }));
+        await transaction.commit();
+    }
+
+    async get_BMT_by_ids(bmt_ids: BMT_IDs): Promise<BMT> {
+        const query = await this.arango_db.query(aql`
+            RETURN {
+                blocks: (
+                    FOR b IN ${this.blocks}
+                    FILTER b._key IN ${bmt_ids.block_ids}
+                    RETURN b
+                ),
+                messages: (
+                    FOR m IN ${this.messages}
+                    FILTER m._key IN ${bmt_ids.message_ids}
+                    RETURN m
+                ),
+                transactions: (
+                    FOR t IN ${this.transactions}
+                    FILTER t._key IN ${bmt_ids.transaction_ids}
+                    RETURN t
+                )
+            }
+        `);
+
+        return await query.next();
+    }
+
+    async remove_BMT_by_ids(bmt_ids: BMT_IDs): Promise<void> {
+        const transaction = await this.arango_db.beginTransaction({
+            write: [ "blocks", "transactions", "messages" ],
+        });
+        await transaction.step(() => this.blocks.removeAll(bmt_ids.block_ids));
+        await transaction.step(() => this.transactions.removeAll(bmt_ids.transaction_ids));
+        await transaction.step(() => this.messages.removeAll(bmt_ids.message_ids));
+        await transaction.commit();
     }
 }
