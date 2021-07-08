@@ -42,8 +42,12 @@ export class BlockWalker {
 
     private async init_previous_masterchain_block_info(): Promise<void> {
         const prev_masterblock_id = this.masterchain_block_info!.prev_block_id;
-        this.prev_masterchain_block_info = await this.ordered_db.get_masterchain_block_info_by_id(prev_masterblock_id); 
-        
+        if (!RangerConfig.test_mode) {
+            this.prev_masterchain_block_info = await this.ordered_db.get_masterchain_block_info_by_id(prev_masterblock_id); 
+        } else {
+            this.prev_masterchain_block_info = await this.buffer_db.get_masterchain_block_info_by_id(prev_masterblock_id);
+        }
+
         if (!this.prev_masterchain_block_info) {
             throw new Error(`Masterblock with id ${prev_masterblock_id} not found in ordered DB`);
         }
@@ -93,11 +97,13 @@ export class BlockWalker {
                 throw new Error(`Shardchain block with id "${current_block_info.id}" not found`);
             }
 
-            current_block_graph_node.gen_utime = current_block.gen_utime;
-            current_block_graph_node.shard = current_block.shard;
-            current_block_graph_node.workchain_id = current_block.workchain_id;
-            current_block_graph_node.message_ids = current_block.message_ids;
-            current_block_graph_node.transaction_ids = current_block.transaction_ids;
+            current_block_graph_node.additional_info = {
+                gen_utime: current_block.gen_utime,
+                shard: current_block.shard,
+                workchain_id: current_block.workchain_id,
+                message_ids: current_block.message_ids,
+                transaction_ids: current_block.transaction_ids,
+            };
 
             const prev_block_id = current_block.prev_block_id;
             let prev_graph_node = get_prev_graph_node_and_attach_current_as_next(prev_block_id, current_block_graph_node, current_shardchain_block_ids, current_block_info.depth);
@@ -143,17 +149,24 @@ export class BlockWalker {
     private async flatten_graph_and_prepare_result(): Promise<void> {
         this.result = Array.from(this.blocks!.values())
             .filter(f => f.type != "Root")
-            .sort((a, b) =>
-                a.gen_utime != b.gen_utime
-                ? a.gen_utime! - b.gen_utime!
-                : (a.workchain_id != b.workchain_id
-                ? a.workchain_id!.localeCompare(b.workchain_id!)
-                : a.shard!.localeCompare(b.shard!)))
+            .sort((a, b) => {
+                let a_info = a.additional_info;
+                let b_info = b.additional_info;
+
+                if (!a_info || !b_info)
+                    throw new Error("This error should be impossible by design");
+
+                return a_info.gen_utime != b_info.gen_utime
+                       ? a_info.gen_utime - b_info.gen_utime
+                       : (a_info.workchain_id != b_info.workchain_id
+                         ? a_info.workchain_id.localeCompare(b_info.workchain_id)
+                         : a_info.shard.localeCompare(b_info.shard))
+            })
             .map(node => {
                 return {
                     block_id: node.id,
-                    transaction_ids: node.transaction_ids,
-                    message_ids: node.message_ids,
+                    transaction_ids: node.additional_info!.transaction_ids,
+                    message_ids: node.additional_info!.message_ids,
                 };
             })
             .concat({
@@ -178,16 +191,20 @@ export class BlockWalker {
     }
 }
 
+export type AdditionalBlockInfo = {
+    gen_utime: number,
+    workchain_id: string,
+    shard: string,
+    message_ids: string[],
+    transaction_ids: string[],
+}
+
 export type RootShardchainBlockGraphNode = {
     type: "Root",
     id: string,
     next?: ShardChainBlockGraphNode,
     next_alt?: ShardChainBlockGraphNode,
-    gen_utime?: number,
-    workchain_id?: string,
-    shard?: string,
-    message_ids?: string[],
-    transaction_ids?: string[],
+    additional_info?: AdditionalBlockInfo,
 };
 
 export type TopShardChainBlockGraphNode = {
@@ -195,11 +212,7 @@ export type TopShardChainBlockGraphNode = {
     id: string,
     prev?: ShardChainBlockGraphNode,
     prev_alt?: ShardChainBlockGraphNode,
-    gen_utime?: number,
-    workchain_id?: string,
-    shard?: string,
-    message_ids?: string[],
-    transaction_ids?: string[],
+    additional_info?: AdditionalBlockInfo,
 };
 
 export type MidShardChainBlockGraphNode = {
@@ -209,11 +222,7 @@ export type MidShardChainBlockGraphNode = {
     next_alt?: ShardChainBlockGraphNode,
     prev?: ShardChainBlockGraphNode,
     prev_alt?: ShardChainBlockGraphNode,
-    gen_utime?: number,
-    workchain_id?: string,
-    shard?: string,
-    message_ids?: string[],
-    transaction_ids?: string[],
+    additional_info?: AdditionalBlockInfo,
 };
 
 export type ShardChainBlockGraphNode = RootShardchainBlockGraphNode | MidShardChainBlockGraphNode | TopShardChainBlockGraphNode;
