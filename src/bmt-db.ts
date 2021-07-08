@@ -119,7 +119,7 @@ export class BmtDb implements IBmtDb {
     async get_shardchain_block_info_by_id(id: string): Promise<ShardChainBlockInfo | undefined> {
         const query = await this.arango_db.query(aql`
             FOR b IN ${this.blocks}
-            FILTER b._key == ${id}
+            FILTER b.workchain_id != -1 && b._key == ${id}
             RETURN { 
                 "_key": b._key,
                 "gen_utime": b.gen_utime,
