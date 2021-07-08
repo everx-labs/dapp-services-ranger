@@ -1,4 +1,4 @@
-import { BMT_IDs } from "./common-types";
+import { BMT_IDs } from "./bmt-types";
 import { IDbWrapper, MasterChainBlockInfo } from "./db-wrapper";
 import { RangerConfig } from "./ranger-config";
 
@@ -35,16 +35,18 @@ export class BlockWalker {
     private async init_masterchain_block_info(): Promise<void> {
         this.masterchain_block_info = await this.buffer_db.get_masterchain_block_info_by_id(this.masterchain_block_id);
 
-        if (!this.masterchain_block_info)
+        if (!this.masterchain_block_info) {
             throw new Error(`Masterblock with id ${this.masterchain_block_id} not found in buffer DB`);
+        }
     }
 
     private async init_previous_masterchain_block_info(): Promise<void> {
         const prev_masterblock_id = this.masterchain_block_info!.prev_block_id;
         this.prev_masterchain_block_info = await this.ordered_db.get_masterchain_block_info_by_id(prev_masterblock_id); 
         
-        if (!this.prev_masterchain_block_info)
+        if (!this.prev_masterchain_block_info) {
             throw new Error(`Masterblock with id ${prev_masterblock_id} not found in ordered DB`);
+        }
     }
 
     private async init_graph(): Promise<void> {
@@ -70,8 +72,9 @@ export class BlockWalker {
 
         while (true) {
             const current_block_info = current_shardchain_block_ids.shift();
-            if (!current_block_info)
+            if (!current_block_info) {
                 break;
+            }
 
             if (current_block_info.depth > BlockWalker.MAX_DEPTH)
                 throw new Error(`Max search depth of ${BlockWalker.MAX_DEPTH} exceeded`);
@@ -86,8 +89,9 @@ export class BlockWalker {
             }
 
             const current_block = await this.buffer_db.get_shardchain_block_info_by_id(current_block_info.id);
-            if (!current_block)
+            if (!current_block) {
                 throw new Error(`Shardchain block with id "${current_block_info.id}" not found`);
+            }
 
             current_block_graph_node.gen_utime = current_block.gen_utime;
             current_block_graph_node.shard = current_block.shard;
@@ -168,8 +172,9 @@ export class BlockWalker {
                 message_ids: [] as string[],
             });
 
-        if (RangerConfig.debug)
+        if (RangerConfig.debug) {
             console.log(this.result);
+        }
     }
 }
 

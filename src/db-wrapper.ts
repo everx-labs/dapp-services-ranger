@@ -2,7 +2,7 @@ import { Database, aql } from "arangojs";
 import { DocumentCollection } from "arangojs/collection";
 import { Config } from "arangojs/connection";
 
-import { BMT, BMT_IDs } from "./common-types";
+import { BMT, BMT_IDs } from "./bmt-types";
 import { RangerConfig } from "./ranger-config";
 
 export interface IDbWrapper {
@@ -160,18 +160,22 @@ export class DbWrapper implements IDbWrapper {
     async init_from(source: IDbWrapper, init_seq_no: number): Promise<void> {
         const collections = await this.arango_db.collections();
 
-        if (!collections.find(c => c.name == "blocks"))
+        if (!collections.find(c => c.name == "blocks")) {
             await this.arango_db.createCollection("blocks");
+        }
         
-        if (!collections.find(c => c.name == "messages"))
+        if (!collections.find(c => c.name == "messages")) {
             await this.arango_db.createCollection("messages");
+        }
         
-        if (!collections.find(c => c.name == "transactions"))
+        if (!collections.find(c => c.name == "transactions")) {
             await this.arango_db.createCollection("transactions");
+        }
 
         const masterchain_block_id = await source.get_first_masterchain_block_id_with_seq_no_not_less_than(init_seq_no);
-        if (!masterchain_block_id)
+        if (!masterchain_block_id) {
             throw new Error(`There is no masterchain block with seq_no >= ${init_seq_no} to init from`);
+        }
 
         const masterchain_block = await source.get_masterchain_block_info_by_id(masterchain_block_id);
         const bmt_ids = {
