@@ -1,14 +1,14 @@
 import { BlockWalker } from "./block-walker";
 import { BMT_IDs } from "./bmt-types";
-import { IDbWrapper } from "./db-wrapper";
+import { IBmtDb } from "./bmt-db";
 import { RangerConfig } from "./ranger-config";
 
 export class Ranger {
-    readonly buffer_db: IDbWrapper;
-    readonly ordered_db: IDbWrapper;
+    readonly buffer_db: IBmtDb;
+    readonly ordered_db: IBmtDb;
     readonly start_seq_no: number;
 
-    constructor(buffer_db: IDbWrapper, ordered_db: IDbWrapper) {
+    constructor(buffer_db: IBmtDb, ordered_db: IBmtDb) {
         this.buffer_db = buffer_db;
         this.ordered_db = ordered_db;
         this.start_seq_no = RangerConfig.test_mode ? 200000 : -1;
@@ -38,7 +38,7 @@ export class Ranger {
             await this.ordered_db.init_from(this.buffer_db, this.start_seq_no);
         }
 
-        async function there_is_no_masterchain_blocks_in(db: IDbWrapper, start_seq_no: number): Promise<boolean> {
+        async function there_is_no_masterchain_blocks_in(db: IBmtDb, start_seq_no: number): Promise<boolean> {
             const masterchain_block = await db.get_first_masterchain_block_id_with_seq_no_not_less_than(start_seq_no);
             return !masterchain_block;
         }

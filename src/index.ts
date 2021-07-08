@@ -1,6 +1,6 @@
 import os from "os";
 import path from "path";
-import { DbWrapper } from "./db-wrapper";
+import { BmtDb } from "./bmt-db";
 import { Ranger } from "./ranger";
 import { RangerConfig } from "./ranger-config";
 
@@ -12,8 +12,8 @@ import { RangerConfig } from "./ranger-config";
         const configPath = process.argv.length > 1 ? process.argv[2] : path.resolve(os.homedir(), ".tonlabs", "ranger.config.json");
         RangerConfig.loadFromFile(configPath);
 
-        const buffer_db = new DbWrapper(RangerConfig.get_buffer_db_config());
-        const ordered_db = new DbWrapper(RangerConfig.get_ordered_db_config());
+        const buffer_db = new BmtDb(RangerConfig.get_buffer_db_config());
+        const ordered_db = new BmtDb(RangerConfig.get_ordered_db_config());
         const ranger = new Ranger(buffer_db, ordered_db);
         await ranger.run();
     } catch (e) {

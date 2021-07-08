@@ -1,11 +1,11 @@
 import { BMT_IDs } from "./bmt-types";
-import { IDbWrapper, MasterChainBlockInfo } from "./db-wrapper";
+import { IBmtDb, MasterChainBlockInfo } from "./bmt-db";
 import { RangerConfig } from "./ranger-config";
 
 export class BlockWalker {
     static MAX_DEPTH = 10;
-    readonly buffer_db: IDbWrapper;
-    readonly ordered_db: IDbWrapper;
+    readonly buffer_db: IBmtDb;
+    readonly ordered_db: IBmtDb;
     readonly masterchain_block_id: string;
 
     masterchain_block_info?: MasterChainBlockInfo;
@@ -18,7 +18,7 @@ export class BlockWalker {
     
     result?: BMT_IDs;
 
-    constructor(buffer_db: IDbWrapper, ordered_db: IDbWrapper, masterchain_block_id: string) {
+    constructor(buffer_db: IBmtDb, ordered_db: IBmtDb, masterchain_block_id: string) {
         this.buffer_db = buffer_db;
         this.ordered_db = ordered_db;
         this.masterchain_block_id = masterchain_block_id;

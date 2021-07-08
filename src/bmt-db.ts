@@ -5,14 +5,14 @@ import { Config } from "arangojs/connection";
 import { BMT, BMT_IDs } from "./bmt-types";
 import { RangerConfig } from "./ranger-config";
 
-export interface IDbWrapper {
+export interface IBmtDb {
     get_existing_message_ids_from_id_array(message_ids: string[]): Promise<string[]>;
     get_existing_transaction_ids_from_id_array(transaction_ids: string[]): Promise<string[]>;
     get_first_masterchain_block_id_with_seq_no_not_less_than(min_seq_no: number): Promise<string | undefined>;
     get_masterchain_block_info_by_id(id: string): Promise<MasterChainBlockInfo | undefined>;
     get_shardchain_block_info_by_id(id: string): Promise<ShardChainBlockInfo | undefined>;
     get_last_masterchain_block_seq_no(): Promise<number | undefined>;
-    init_from(source: IDbWrapper, init_seq_no: number): Promise<void>;
+    init_from(source: IBmtDb, init_seq_no: number): Promise<void>;
 
     add_BMT(bmt: BMT): Promise<void>;
     get_BMT_by_ids(bmt_ids: BMT_IDs): Promise<BMT>;
@@ -41,7 +41,7 @@ export type ShardChainBlockInfo = {
     transaction_ids: string[],
 };
 
-export class DbWrapper implements IDbWrapper {
+export class BmtDb implements IBmtDb {
     readonly arango_db: Database;
     readonly blocks: DocumentCollection;
     readonly messages: DocumentCollection;
@@ -157,7 +157,7 @@ export class DbWrapper implements IDbWrapper {
         return await query.next();
     }
 
-    async init_from(source: IDbWrapper, init_seq_no: number): Promise<void> {
+    async init_from(source: IBmtDb, init_seq_no: number): Promise<void> {
         const collections = await this.arango_db.collections();
 
         if (!collections.find(c => c.name == "blocks")) {
