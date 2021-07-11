@@ -70,58 +70,59 @@ export class BlockWalker {
     private async walk_shardchain_block_and_fill_graph(): Promise<void> {
         const blocks = this.blocks!;
 
-        let current_shardchain_block_ids = this.top_shardchain_block_ids!
-            .filter(id => !blocks.get(id)) // skip root blocks
-            .map(id => { return { id: id, depth: 0}; });
+        let next_shardchain_block_ids = this.top_shardchain_block_ids!
+            .filter(id => !blocks.get(id)); // skip root blocks
+        let current_depth = 0;
 
-        while (true) {
-            const current_block_info = current_shardchain_block_ids.shift();
-            if (!current_block_info) {
-                break;
-            }
+        // Init top nodes
+        next_shardchain_block_ids.forEach(id => {
+            blocks.set(id, {
+                type: "Top",
+                id
+            });
+        })
 
-            if (current_block_info.depth > BlockWalker.MAX_DEPTH)
+        while (next_shardchain_block_ids.length > 0) {
+            if (current_depth > BlockWalker.MAX_DEPTH) {
                 throw new Error(`Max search depth of ${BlockWalker.MAX_DEPTH} exceeded`);
+            }
 
-            let current_block_graph_node = blocks.get(current_block_info.id) as TopShardChainBlockGraphNode | MidShardChainBlockGraphNode;
-            if (!current_block_graph_node) {
-                current_block_graph_node = {
-                    type: "Top",
-                    id: current_block_info.id,
+            let current_shardchain_block_ids = next_shardchain_block_ids;
+            next_shardchain_block_ids = [];
+
+            const current_blocks = await this.buffer_db.get_shardchain_block_infos_by_ids(current_shardchain_block_ids);
+            if (current_blocks.length != current_shardchain_block_ids.length)
+                throw new Error(`Some of the shardchain blocks not found while trying to get blocks with ids ${current_shardchain_block_ids}`);
+
+            current_blocks.forEach(block_info => {
+                const node = blocks.get(block_info._key) as TopShardChainBlockGraphNode | MidShardChainBlockGraphNode;
+                node.additional_info = {
+                    gen_utime: block_info.gen_utime,
+                    shard: block_info.shard,
+                    workchain_id: block_info.workchain_id,
+                    message_ids: block_info.message_ids,
+                    transaction_ids: block_info.transaction_ids,
                 };
-                blocks.set(current_block_info.id, current_block_graph_node);
-            }
+                
+                const prev_block_id = block_info.prev_block_id;
+                let prev_graph_node = process_prev(prev_block_id, node, next_shardchain_block_ids);
+                node.prev = prev_graph_node;
+                
+                const prev_alt_block_id = block_info.prev_alt_block_id;
+                if (prev_alt_block_id) {
+                    let prev_alt_graph_node = process_prev(prev_alt_block_id, node, next_shardchain_block_ids);
+                    node.prev_alt = prev_alt_graph_node;
+                }
+            });
 
-            const current_block = await this.buffer_db.get_shardchain_block_info_by_id(current_block_info.id);
-            if (!current_block) {
-                throw new Error(`Shardchain block with id "${current_block_info.id}" not found`);
-            }
-
-            current_block_graph_node.additional_info = {
-                gen_utime: current_block.gen_utime,
-                shard: current_block.shard,
-                workchain_id: current_block.workchain_id,
-                message_ids: current_block.message_ids,
-                transaction_ids: current_block.transaction_ids,
-            };
-
-            const prev_block_id = current_block.prev_block_id;
-            let prev_graph_node = get_prev_graph_node_and_attach_current_as_next(prev_block_id, current_block_graph_node, current_shardchain_block_ids, current_block_info.depth);
-            current_block_graph_node.prev = prev_graph_node;
-
-            const prev_alt_block_id = current_block.prev_alt_block_id;
-            if (prev_alt_block_id) {
-                let prev_alt_graph_node = get_prev_graph_node_and_attach_current_as_next(prev_alt_block_id, current_block_graph_node, current_shardchain_block_ids, current_block_info.depth);
-                current_block_graph_node.prev_alt = prev_alt_graph_node;
-            }
+            current_depth++;
         }
 
         // Helper functions
-        function get_prev_graph_node_and_attach_current_as_next(
+        function process_prev(
             prev_block_id: string, 
             current_block_graph_node: TopShardChainBlockGraphNode | MidShardChainBlockGraphNode,
-            current_shardchain_block_ids: { id: string, depth: number }[],
-            current_depth: number,
+            next_shardchain_block_ids: string[],
         ) {
             let prev_graph_node = blocks.get(prev_block_id) as RootShardchainBlockGraphNode | MidShardChainBlockGraphNode;
             if (prev_graph_node) {
@@ -140,7 +141,7 @@ export class BlockWalker {
                     next: current_block_graph_node,
                 };
                 blocks.set(prev_block_id, prev_graph_node);
-                current_shardchain_block_ids.push({ id: prev_block_id, depth: current_depth + 1 });
+                next_shardchain_block_ids.push(prev_block_id);
             }
             return prev_graph_node;
         }

@@ -11,6 +11,7 @@ export interface IBmtDb {
     get_first_masterchain_block_id_with_seq_no_not_less_than(min_seq_no: number): Promise<string | undefined>;
     get_masterchain_block_info_by_id(id: string): Promise<MasterChainBlockInfo | undefined>;
     get_shardchain_block_info_by_id(id: string): Promise<ShardChainBlockInfo | undefined>;
+    get_shardchain_block_infos_by_ids(ids: string[]): Promise<ShardChainBlockInfo[]>;
     get_last_masterchain_block_seq_no(): Promise<number | undefined>;
     init_from(source: IBmtDb, init_seq_no: number): Promise<void>;
 
@@ -143,6 +144,35 @@ export class BmtDb implements IBmtDb {
         `);
 
         return await query.next();
+    }
+
+    async get_shardchain_block_infos_by_ids(ids: string[]): Promise<ShardChainBlockInfo[]> {
+        const query = await this.arango_db.query(aql`
+            FOR b IN ${this.blocks}
+            FILTER b._key IN ${ids} && b.workchain_id != -1
+            RETURN { 
+                "_key": b._key,
+                "gen_utime": b.gen_utime,
+                "workchain_id": b.workchain_id,
+                "seq_no": b.seq_no,
+                "shard": b.shard,
+                "prev_block_id": b.prev_ref.root_hash,
+                "prev_alt_block_id": b.prev_alt_ref.root_hash,
+                "message_ids": (FOR m_id IN UNION_DISTINCT(
+                        b.out_msg_descr[*].msg_id,
+                        b.out_msg_descr[*].out_msg.msg_id,
+                        b.out_msg_descr[*].reimport.msg_id,
+                        b.in_msg_descr[*].msg_id,
+                        b.in_msg_descr[*].in_msg.msg_id
+                    ) FILTER m_id != null RETURN m_id),
+                "transaction_ids": (FOR t_id IN UNION_DISTINCT(
+                        b.out_msg_descr[*].transaction_id,
+                        b.out_msg_descr[*].reimport.transaction_id
+                    ) FILTER t_id != null RETURN t_id),
+            }
+        `);
+
+        return await query.all();
     }
 
     async get_last_masterchain_block_seq_no(): Promise<number | undefined> {
