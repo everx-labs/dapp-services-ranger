@@ -4,8 +4,7 @@ import { RangerConfig } from "./ranger-config";
 
 export class BlockWalker {
     static MAX_DEPTH = 10;
-    readonly buffer_db: IBmtDb;
-    readonly ordered_db: IBmtDb;
+    readonly bmt_db: IBmtDb;
     readonly masterchain_block_id: string;
 
     masterchain_block_info?: MasterChainBlockInfo;
@@ -18,22 +17,22 @@ export class BlockWalker {
     
     result?: BMT_IDs;
 
-    constructor(buffer_db: IBmtDb, ordered_db: IBmtDb, masterchain_block_id: string) {
-        this.buffer_db = buffer_db;
-        this.ordered_db = ordered_db;
+    constructor(bmt_db: IBmtDb, masterchain_block_id: string) {
+        this.bmt_db = bmt_db;
         this.masterchain_block_id = masterchain_block_id;
     }
 
-    async run(): Promise<void> {
+    async run(): Promise<BMT_IDs> {
         await this.init_masterchain_block_info();
         await this.init_previous_masterchain_block_info();
         await this.init_graph();
         await this.walk_shardchain_block_and_fill_graph();
         await this.flatten_graph_and_prepare_result();
+        return this.result!;
     }
 
     private async init_masterchain_block_info(): Promise<void> {
-        this.masterchain_block_info = await this.buffer_db.get_masterchain_block_info_by_id(this.masterchain_block_id);
+        this.masterchain_block_info = await this.bmt_db.get_masterchain_block_info_by_id(this.masterchain_block_id);
 
         if (!this.masterchain_block_info) {
             throw new Error(`Masterblock with id ${this.masterchain_block_id} not found in buffer DB`);
@@ -42,12 +41,9 @@ export class BlockWalker {
 
     private async init_previous_masterchain_block_info(): Promise<void> {
         const prev_masterblock_id = this.masterchain_block_info!.prev_block_id;
-        if (!RangerConfig.test_mode) {
-            this.prev_masterchain_block_info = await this.ordered_db.get_masterchain_block_info_by_id(prev_masterblock_id); 
-        } else {
-            this.prev_masterchain_block_info = await this.buffer_db.get_masterchain_block_info_by_id(prev_masterblock_id);
-        }
-
+        
+        this.prev_masterchain_block_info = await this.bmt_db.get_masterchain_block_info_by_id(prev_masterblock_id);
+        
         if (!this.prev_masterchain_block_info) {
             throw new Error(`Masterblock with id ${prev_masterblock_id} not found in ordered DB`);
         }
@@ -90,7 +86,7 @@ export class BlockWalker {
             let current_shardchain_block_ids = next_shardchain_block_ids;
             next_shardchain_block_ids = [];
 
-            const current_blocks = await this.buffer_db.get_shardchain_block_infos_by_ids(current_shardchain_block_ids);
+            const current_blocks = await this.bmt_db.get_shardchain_block_infos_by_ids(current_shardchain_block_ids);
             if (current_blocks.length != current_shardchain_block_ids.length)
                 throw new Error(`Some of the shardchain blocks not found while trying to get blocks with ids ${current_shardchain_block_ids}`);
 
@@ -150,19 +146,6 @@ export class BlockWalker {
     private async flatten_graph_and_prepare_result(): Promise<void> {
         this.result = Array.from(this.blocks!.values())
             .filter(f => f.type != "Root")
-            .sort((a, b) => {
-                let a_info = a.additional_info;
-                let b_info = b.additional_info;
-
-                if (!a_info || !b_info)
-                    throw new Error("This error should be impossible by design");
-
-                return a_info.gen_utime != b_info.gen_utime
-                       ? a_info.gen_utime - b_info.gen_utime
-                       : (a_info.workchain_id != b_info.workchain_id
-                         ? a_info.workchain_id.localeCompare(b_info.workchain_id)
-                         : a_info.shard.localeCompare(b_info.shard))
-            })
             .map(node => {
                 return {
                     block_id: node.id,

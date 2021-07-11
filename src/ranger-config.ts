@@ -4,8 +4,7 @@ import fs from "fs";
 export class RangerConfig {
     static test_mode = true;
     static debug = true;
-    private static buffer_db?: Config;
-    private static ordered_db?: Config;
+    private static db?: Config;
 
     static initFrom(source: any) {
         if (typeof source === "string") {
@@ -24,13 +23,11 @@ export class RangerConfig {
             this.debug = source.debug;
         }
 
-        if (source.buffer_db === undefined || typeof source.buffer_db !== "object" ||
-            source.ordered_db === undefined || typeof source.ordered_db !== "object") {
-            throw new Error("Buffer or ordered db config not provided properly");
+        if (source.db === undefined || typeof source.db !== "object") {
+            throw new Error("Database config not provided properly");
         }
 
-        this.buffer_db = source.buffer_db;
-        this.ordered_db = source.ordered_db;
+        this.db = source.db;
     }
 
     static loadFromFile(configPath: string) {
@@ -38,17 +35,10 @@ export class RangerConfig {
         this.initFrom(config);
     }
 
-    static get_buffer_db_config(): Config {
-        if (!this.buffer_db) {
-            throw new Error("There is no buffer db config provided");
+    static get_db_config(): Config {
+        if (!this.db) {
+            throw new Error("There is no database config provided");
         }
-        return this.buffer_db;
-    }
-
-    static get_ordered_db_config(): Config {
-        if (!this.ordered_db) {
-            throw new Error("There is no ordered db config provided");
-        }
-        return this.ordered_db;
+        return this.db;
     }
 }

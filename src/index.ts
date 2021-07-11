@@ -9,12 +9,11 @@ import { RangerConfig } from "./ranger-config";
 
 (async () => {
     try { 
-        const configPath = process.argv.length > 1 ? process.argv[2] : path.resolve(os.homedir(), ".tonlabs", "ranger.config.json");
+        const configPath = process.argv.length > 2 ? process.argv[2] : path.resolve(os.homedir(), ".tonlabs", "ranger.config.json");
         RangerConfig.loadFromFile(configPath);
 
-        const buffer_db = new BmtDb(RangerConfig.get_buffer_db_config());
-        const ordered_db = new BmtDb(RangerConfig.get_ordered_db_config());
-        const ranger = new Ranger(buffer_db, ordered_db);
+        const bmt_db = new BmtDb(RangerConfig.get_db_config());
+        const ranger = new Ranger(bmt_db);
         await ranger.run();
     } catch (e) {
         console.error(e);

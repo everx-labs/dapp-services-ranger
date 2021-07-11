@@ -2,22 +2,14 @@ import { Database, aql } from "arangojs";
 import { DocumentCollection } from "arangojs/collection";
 import { Config } from "arangojs/connection";
 
-import { BMT, BMT_IDs } from "./bmt-types";
-import { RangerConfig } from "./ranger-config";
-
 export interface IBmtDb {
     get_existing_message_ids_from_id_array(message_ids: string[]): Promise<string[]>;
     get_existing_transaction_ids_from_id_array(transaction_ids: string[]): Promise<string[]>;
     get_first_masterchain_block_id_with_seq_no_not_less_than(min_seq_no: number): Promise<string | undefined>;
     get_masterchain_block_info_by_id(id: string): Promise<MasterChainBlockInfo | undefined>;
-    get_shardchain_block_info_by_id(id: string): Promise<ShardChainBlockInfo | undefined>;
+    get_shardchain_block_info_by_id(id: string): Promise<ShardChainBlockInfo | undefined>; // not used at the time of writing
     get_shardchain_block_infos_by_ids(ids: string[]): Promise<ShardChainBlockInfo[]>;
-    get_last_masterchain_block_seq_no(): Promise<number | undefined>;
-    init_from(source: IBmtDb, init_seq_no: number): Promise<void>;
-
-    add_BMT(bmt: BMT): Promise<void>;
-    get_BMT_by_ids(bmt_ids: BMT_IDs): Promise<BMT>;
-    remove_BMT_by_ids(bmt_ids: BMT_IDs): Promise<void>;
+    get_last_masterchain_block_seq_no(): Promise<number | undefined>; // not used at the time of writing
 }
 
 export type MasterChainBlockInfo = {
@@ -185,83 +177,5 @@ export class BmtDb implements IBmtDb {
         `);
 
         return await query.next();
-    }
-
-    async init_from(source: IBmtDb, init_seq_no: number): Promise<void> {
-        const collections = await this.arango_db.collections();
-
-        if (!collections.find(c => c.name == "blocks")) {
-            await this.arango_db.createCollection("blocks");
-        }
-        
-        if (!collections.find(c => c.name == "messages")) {
-            await this.arango_db.createCollection("messages");
-        }
-        
-        if (!collections.find(c => c.name == "transactions")) {
-            await this.arango_db.createCollection("transactions");
-        }
-
-        const masterchain_block_id = await source.get_first_masterchain_block_id_with_seq_no_not_less_than(init_seq_no);
-        if (!masterchain_block_id) {
-            throw new Error(`There is no masterchain block with seq_no >= ${init_seq_no} to init from`);
-        }
-
-        const masterchain_block = await source.get_masterchain_block_info_by_id(masterchain_block_id);
-        const bmt_ids = {
-            block_ids: [ masterchain_block_id ],
-            message_ids: masterchain_block!.message_ids,
-            transaction_ids: masterchain_block!.transaction_ids,
-        };
-        const bmt = await source.get_BMT_by_ids(bmt_ids);
-        await this.add_BMT(bmt);
-        
-        if (!RangerConfig.test_mode) {
-            await source.remove_BMT_by_ids(bmt_ids);
-        }
-    }
-    
-    async add_BMT(bmt: BMT): Promise<void> {
-        const transaction = await this.arango_db.beginTransaction({
-            write: [ "blocks", "transactions", "messages" ],
-        });
-        await transaction.step(() => this.blocks.saveAll(bmt.blocks, { overwriteMode: "ignore" }));
-        await transaction.step(() => this.transactions.saveAll(bmt.transactions, { overwriteMode: "ignore" }));
-        await transaction.step(() => this.messages.saveAll(bmt.messages, { overwriteMode: "ignore" }));
-        await transaction.commit();
-    }
-
-    async get_BMT_by_ids(bmt_ids: BMT_IDs): Promise<BMT> {
-        const query = await this.arango_db.query(aql`
-            RETURN {
-                blocks: (
-                    FOR b IN ${this.blocks}
-                    FILTER b._key IN ${bmt_ids.block_ids}
-                    RETURN b
-                ),
-                messages: (
-                    FOR m IN ${this.messages}
-                    FILTER m._key IN ${bmt_ids.message_ids}
-                    RETURN m
-                ),
-                transactions: (
-                    FOR t IN ${this.transactions}
-                    FILTER t._key IN ${bmt_ids.transaction_ids}
-                    RETURN t
-                )
-            }
-        `);
-
-        return await query.next();
-    }
-
-    async remove_BMT_by_ids(bmt_ids: BMT_IDs): Promise<void> {
-        const transaction = await this.arango_db.beginTransaction({
-            write: [ "blocks", "transactions", "messages" ],
-        });
-        await transaction.step(() => this.blocks.removeAll(bmt_ids.block_ids));
-        await transaction.step(() => this.transactions.removeAll(bmt_ids.transaction_ids));
-        await transaction.step(() => this.messages.removeAll(bmt_ids.message_ids));
-        await transaction.commit();
     }
 }

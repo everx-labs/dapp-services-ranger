@@ -3,9 +3,3 @@ export type BMT_IDs = {
     transaction_ids: string[],
     message_ids: string[],
 }
-
-export type BMT = {
-    blocks: any[],
-    transactions: any[],
-    messages: any[],
-}
