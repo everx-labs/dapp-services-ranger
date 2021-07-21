@@ -28,7 +28,7 @@ export class ChainOrderer {
     }
 
     private async process_first_mc_block(): Promise<void> {
-        const mc_block = await this.dBmtDb.get_masterchain_block_by_seq_no(200000);
+        const mc_block = await this.dBmtDb.get_masterchain_block_by_seq_no(1);
         const bmt: Bmt = {
             master_block: mc_block,
             shard_blocks: [],
