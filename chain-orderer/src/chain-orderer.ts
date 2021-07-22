@@ -22,10 +22,11 @@ export class ChainOrderer {
         let last_report = Date.now();
         let previous_mc_block: MasterChainBlock | null = null;
         while (last_processed_mc_seq_no < max_mc_seq_no) {
-            const bmt = await this.get_BMT_with_mc_seq_no(last_processed_mc_seq_no + 1, previous_mc_block);
+            const bmt: Bmt = await this.get_BMT_with_mc_seq_no(last_processed_mc_seq_no + 1, previous_mc_block);
             await this.set_chain_order_for_bmt(bmt);
             await this.update_bmt_summary(bmt);
             last_processed_mc_seq_no++;
+            previous_mc_block = bmt.master_block;
 
             if (Date.now() - last_report >= 1000) {
                 last_report = Date.now();
