@@ -90,16 +90,27 @@ export class DistributedBmtDb {
 
     async get_max_processed_seq_no() {
         const databases = await this.databases;
-        return databases.reduce<number>((max_mc_seq_no, curr) => {
+        return databases.reduce<number>((max_processed_mc_seq_no, curr) => {
             // max_mc_seq_no comparisson is needed for the case 
             // when the script failed while updating bmt collection
             // in two or more databases sequentially
             return (
                 curr.last_chain_ordered_mc_seq_no &&
-                curr.last_chain_ordered_mc_seq_no > max_mc_seq_no &&
+                curr.last_chain_ordered_mc_seq_no > max_processed_mc_seq_no &&
                 curr.max_mc_seq_no && 
                 curr.max_mc_seq_no >= curr.last_chain_ordered_mc_seq_no)
                 ? curr.last_chain_ordered_mc_seq_no
+                : max_processed_mc_seq_no;
+        }, -1)
+    }
+
+    async get_max_mc_seq_no() {
+        const databases = await this.databases;
+        return databases.reduce<number>((max_mc_seq_no, curr) => {
+            return (
+                curr.max_mc_seq_no && 
+                curr.max_mc_seq_no > max_mc_seq_no)
+                ? curr.max_mc_seq_no
                 : max_mc_seq_no;
         }, -1)
     }

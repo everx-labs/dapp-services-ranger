@@ -10,21 +10,30 @@ export class ChainOrderer {
     }
 
     async run() {
+        const max_mc_seq_no = await this.dBmtDb.get_max_mc_seq_no();
         let last_processed_mc_seq_no = await this.dBmtDb.get_max_processed_seq_no();
 
         if (last_processed_mc_seq_no < 0) {
             await this.process_first_mc_block();
             last_processed_mc_seq_no = await this.dBmtDb.get_max_processed_seq_no();
+            console.log(last_processed_mc_seq_no);
         }
 
+        let last_report = Date.now();
         let previous_mc_block: MasterChainBlock | null = null;
-        while (true) {
-            console.log(last_processed_mc_seq_no);
+        while (last_processed_mc_seq_no < max_mc_seq_no) {
             const bmt = await this.get_BMT_with_mc_seq_no(last_processed_mc_seq_no + 1, previous_mc_block);
             await this.set_chain_order_for_bmt(bmt);
             await this.update_bmt_summary(bmt);
             last_processed_mc_seq_no++;
+
+            if (Date.now() - last_report >= 1000) {
+                last_report = Date.now();
+                console.log(last_processed_mc_seq_no);
+            }
         }
+
+        console.log(`Finished at seq_no ${last_processed_mc_seq_no}`);
     }
 
     private async process_first_mc_block(): Promise<void> {
