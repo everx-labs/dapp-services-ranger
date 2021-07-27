@@ -1,30 +1,41 @@
 import { Config } from "arangojs/connection";
+
+import { Bmt } from "./bmt";
+import { ChainRangesDb } from "./chain-ranges-db";
+import { ChainRangesVerificationDb } from "./chain-ranges-verification-db";
 import { Block, DistributedBmtDb, MasterChainBlock, ShardChainBlock } from "./distributed-bmt-db";
 import { toU64String } from "./u64string";
 
 export class ChainOrderer {
     dBmtDb: DistributedBmtDb;
+    chainRangesVerificationDb: ChainRangesVerificationDb;
+    chainRangesDb: ChainRangesDb;
 
     constructor(config: ChainOrdererConfig) {
-        this.dBmtDb = new DistributedBmtDb(config.databases);
+        if (!config.bmt_databases || !config.chain_ranges_database || !config.chain_ranges_verifying_database) {
+            throw new Error("There are parameters missing in config");
+        }
+
+        this.dBmtDb = new DistributedBmtDb(config.bmt_databases);
+        this.chainRangesVerificationDb = new ChainRangesVerificationDb(config.chain_ranges_verifying_database);
+        this.chainRangesDb = new ChainRangesDb(config.chain_ranges_database);
     }
 
     async run() {
-        const max_mc_seq_no = await this.dBmtDb.get_max_mc_seq_no();
-        let last_processed_mc_seq_no = await this.dBmtDb.get_max_processed_seq_no();
+        await this.init_databases_and_process_first_mc_block_if_needed();
 
-        if (last_processed_mc_seq_no < 0) {
-            await this.process_first_mc_block();
-            last_processed_mc_seq_no = await this.dBmtDb.get_max_processed_seq_no();
-            console.log(last_processed_mc_seq_no);
-        }
+        const max_mc_seq_no = await this.dBmtDb.get_max_mc_seq_no();
+        const summary = await this.chainRangesVerificationDb.get_summary();
+        let last_processed_mc_seq_no = summary.last_verified_master_seq_no;
 
         let last_report = Date.now();
         let previous_mc_block: MasterChainBlock | null = null;
         while (last_processed_mc_seq_no < max_mc_seq_no) {
             const bmt: Bmt = await this.get_BMT_with_mc_seq_no(last_processed_mc_seq_no + 1, previous_mc_block);
+            await this.chainRangesDb.add_range(bmt);
             await this.set_chain_order_for_bmt(bmt);
-            await this.update_bmt_summary(bmt);
+            await this.update_summary(bmt);
+
             last_processed_mc_seq_no++;
             previous_mc_block = bmt.master_block;
 
@@ -37,14 +48,26 @@ export class ChainOrderer {
         console.log(`Finished at seq_no ${last_processed_mc_seq_no}`);
     }
 
-    private async process_first_mc_block(): Promise<void> {
-        const mc_block = await this.dBmtDb.get_masterchain_block_by_seq_no(1);
-        const bmt: Bmt = {
-            master_block: mc_block,
-            shard_blocks: [],
-        };
-        await this.set_chain_order_for_bmt(bmt);
-        await this.update_bmt_summary(bmt);
+    private async init_databases_and_process_first_mc_block_if_needed(): Promise<void> {
+        await this.chainRangesVerificationDb.init_summary_if_not_existant({
+            reliabe_chain_order_upper_boundary: "01",
+            last_verified_master_seq_no: 0,
+            workchain_ids: [-1, 0],
+        });
+
+        await this.chainRangesDb.ensure_collection_exists();
+
+        const summary = await this.chainRangesVerificationDb.get_summary();
+        if (summary.last_verified_master_seq_no == 0) {
+            const mc_block = await this.dBmtDb.get_masterchain_block_by_seq_no(1);
+            const bmt: Bmt = {
+                master_block: mc_block,
+                shard_blocks: [],
+            };
+            await this.chainRangesDb.add_range(bmt);
+            await this.set_chain_order_for_bmt(bmt);
+            await this.update_summary(bmt);
+        }
     }
 
     private async get_BMT_with_mc_seq_no(mc_seq_no: number, previous_mc_block: MasterChainBlock | null): Promise<Bmt> {
@@ -103,45 +126,13 @@ export class ChainOrderer {
             const inner_order = workchain_order + seq_no_order + shard_order;
             const block_order = master_order + inner_order; 
             
-            await this.set_chain_order_for_block_messages(block, block_order);
             await this.set_chain_order_for_block_transactions(block, block_order);
             await this.dBmtDb.set_chain_order_for_block(block, block_order);
         }
 
         const master_block_order = master_order + "m";
-        await this.set_chain_order_for_block_messages(bmt.master_block, master_block_order);
         await this.set_chain_order_for_block_transactions(bmt.master_block, master_block_order);
         await this.dBmtDb.set_chain_order_for_block(bmt.master_block, master_block_order);
-    }
-
-    private async set_chain_order_for_block_messages(block: Block, block_order: string): Promise<void> {
-        const messages = await this.dBmtDb.get_messages(block.message_ids, block.gen_utime);
-        messages.sort((m1, m2) => {
-            if (m1.created_lt < m2.created_lt) {
-                return -1;
-            }
-            if (m1.created_lt > m2.created_lt) {
-                return 1;
-            }
-            
-            if (m1.id < m2.id) {
-                return -1;
-            }
-            if (m1.id > m2.id) {
-                return 1;
-            }
-
-            throw new Error(`Duplicate message id: ${m1.id}`);
-        });
-
-        const message_chain_orders = messages.map((m, index) => {
-            return {
-                id: m.id,
-                chain_order: block_order + toU64String(index),
-            };
-        });
-
-        await this.dBmtDb.set_message_chain_orders(message_chain_orders, block.gen_utime);
     }
 
     private async set_chain_order_for_block_transactions(block: Block, block_order: string): Promise<void> {
@@ -174,30 +165,16 @@ export class ChainOrderer {
         await this.dBmtDb.set_transaction_chain_orders(transaction_chain_orders, block.gen_utime);
     }
 
-    private async update_bmt_summary(bmt: Bmt): Promise<void> {
-        let times = {
-            start: bmt.master_block.gen_utime,
-            end: bmt.master_block.gen_utime,
-        };
-        bmt.shard_blocks.reduce((t, b) => {
-            return {
-                start: Math.min(t.start, b.gen_utime),
-                end: Math.max(t.end, b.gen_utime),
-            }
-        }, times);
-
-        await this.dBmtDb.update_bmt_summary(bmt.master_block.seq_no, times.start, times.end);
+    private async update_summary(bmt: Bmt): Promise<void> {
+        await this.chainRangesVerificationDb.update_verifyed_boundary(bmt.master_block.seq_no);
     }
 }
 
 export type ChainOrdererConfig = {
-    databases: Config[],
+    bmt_databases: Config[],
+    chain_ranges_database: Config,
+    chain_ranges_verifying_database: Config,
 }
-
-type Bmt = {
-    master_block: MasterChainBlock,
-    shard_blocks: ShardChainBlock[],
-};
 
 function shard_to_reversed_to_U64String(shard: string) {
     let result = "";
