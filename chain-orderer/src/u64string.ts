@@ -1,4 +1,4 @@
-export function toU64String(value: number) {
+export function toU64String(value: number): string {
     if (!Number.isInteger(value)) {
         throw new Error(`Value ${value} is not integer`);
     }

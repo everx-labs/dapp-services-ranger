@@ -21,7 +21,7 @@ export class ChainOrderer {
         this.chainRangesDb = new ChainRangesDb(config.chain_ranges_database);
     }
 
-    async run() {
+    async run(): Promise<void> {
         await this.init_databases_and_process_first_mc_block_if_needed();
 
         const max_mc_seq_no = await this.dBmtDb.get_max_mc_seq_no();
@@ -49,7 +49,7 @@ export class ChainOrderer {
     }
 
     private async init_databases_and_process_first_mc_block_if_needed(): Promise<void> {
-        await this.chainRangesVerificationDb.init_summary_if_not_existant({
+        await this.chainRangesVerificationDb.init_summary_if_not_exists({
             reliabe_chain_order_upper_boundary: "01",
             last_verified_master_seq_no: 0,
             workchain_ids: [-1, 0],
@@ -74,7 +74,7 @@ export class ChainOrderer {
         previous_mc_block ??= await this.dBmtDb.get_masterchain_block_by_seq_no(mc_seq_no - 1);
         const current_mc_block = await this.dBmtDb.get_masterchain_block_by_seq_no(mc_seq_no);
         
-        let blocks = [] as ShardChainBlock[];
+        const blocks = [] as ShardChainBlock[];
         
         const root_shardchain_block_ids = new Map<string, boolean>(previous_mc_block.shard_block_ids.map(id => [id, true]));
         const top_shardchain_block_ids = current_mc_block.shard_block_ids;
@@ -87,7 +87,7 @@ export class ChainOrderer {
                 throw new Error(`Max shard search depth (${max_depth}) exceeded`);
             }
 
-            let current_blocks = await this.dBmtDb.get_shardchain_blocks_by_ids(shardchain_block_ids_to_get, current_mc_block.gen_utime);
+            const current_blocks = await this.dBmtDb.get_shardchain_blocks_by_ids(shardchain_block_ids_to_get, current_mc_block.gen_utime);
             blocks.push(...current_blocks);
 
             shardchain_block_ids_to_get = []
@@ -116,7 +116,7 @@ export class ChainOrderer {
             // we reached the blocks chain-ordered by parser or
             // the script failed between setting chain order and
             // updating summary
-            this.verify_bmt(bmt);
+            await this.verify_bmt(bmt);
             return;
         }
 
@@ -147,10 +147,10 @@ export class ChainOrderer {
     private async verify_bmt(bmt: Bmt) {        
         for (let b_i = 0; b_i < bmt.shard_blocks.length; b_i++) {
             const block = bmt.shard_blocks[b_i];
-            this.dBmtDb.verify_block_and_transactions(block);
+            await this.dBmtDb.verify_block_and_transactions(block);
         }
 
-        this.dBmtDb.verify_block_and_transactions(bmt.master_block);
+        await this.dBmtDb.verify_block_and_transactions(bmt.master_block);
     }
 
     private async set_chain_order_for_block_transactions(block: Block, block_order: string): Promise<void> {
@@ -199,10 +199,17 @@ function shard_to_reversed_to_U64String(shard: string) {
     for (let i = 0; i < shard.length; i++) {
         const hex_symbol = shard[shard.length - i - 1];
         
-        if (result.length == 0 && hex_symbol == "0") 
+        if (result.length == 0 && hex_symbol == "0") {
             continue; // skip zeros from the end
+        }
 
-        result = result + reverse_hex_symbol_map.get(hex_symbol);
+        const reverse_hex_symbol = reverse_hex_symbol_map.get(hex_symbol);
+
+        if (!reverse_hex_symbol) {
+            throw new Error(`Reverse hex for ${hex_symbol} not found while processing shard ${shard}`);
+        }
+
+        result = `${result}${reverse_hex_symbol}`;
     }
 
     result = (result.length - 1).toString(16) + result;

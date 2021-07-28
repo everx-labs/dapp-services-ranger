@@ -19,7 +19,7 @@ export class ChainRangesVerificationDb {
         `;
 
         const cursor = await this.database.query(query);
-        const result = cursor.next();
+        const result = await cursor.next() as ChainRangesSummary;
         if (!result) {
             throw new Error("Chain ranges summary not found");
         }
@@ -42,7 +42,7 @@ export class ChainRangesVerificationDb {
         await this.database.query(query);
     }
 
-    async init_summary_if_not_existant(summary_to_init_with: ChainRangesSummary) {
+    async init_summary_if_not_exists(summary_to_init_with: ChainRangesSummary): Promise<void> {
         if (!await this.database.collection("chain_ranges_verification").exists()) {
             await this.database.createCollection("chain_ranges_verification");
         }

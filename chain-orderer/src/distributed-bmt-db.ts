@@ -3,20 +3,14 @@ import { Config } from "arangojs/connection";
 
 export class DistributedBmtDb {
     readonly config: Config[];
-    readonly databases: Promise<{
-        db: Database,
-        min_time: number,
-        max_time: number,
-        min_mc_seq_no: number | null,
-        max_mc_seq_no: number | null,
-    }[]>;
+    readonly databases: Promise<DatabaseWithInfo[]>;
 
     constructor(config: Config[]) {
         this.config = config;
         this.databases = this.init_databases(config);
     }
 
-    async init_databases(config: Config[]) {
+    async init_databases(config: Config[]): Promise<DatabaseWithInfo[]> {
         const databases = await Promise.all(
             config.map(async db_config => {
                 const db = new Database(db_config);
@@ -47,7 +41,12 @@ export class DistributedBmtDb {
                             RETURN b.seq_no)[0],
                     }
                 `);
-                const db_info = await cursor.next();
+                const db_info = await cursor.next() as {
+                    min_time: number,
+                    max_time: number,
+                    min_mc_seq_no: number,
+                    max_mc_seq_no: number,
+                };
 
                 if (!db_info.min_time || !db_info.max_time) {
                     throw new Error(`There is no blocks in database ${db.name}`);
@@ -67,7 +66,7 @@ export class DistributedBmtDb {
         return databases;
     }
 
-    async get_max_mc_seq_no() {
+    async get_max_mc_seq_no(): Promise<number> {
         const databases = await this.databases;
         return databases.reduce<number>((max_mc_seq_no, curr) => {
             return (
@@ -113,7 +112,7 @@ export class DistributedBmtDb {
         }
 
         const cursor = await db.db.query(query);
-        const block = await cursor.next();
+        const block = await cursor.next() as MasterChainBlock | null;
 
         if (!block) {
             throw new Error(`Block with ${seq_no} not found`);
@@ -153,7 +152,7 @@ export class DistributedBmtDb {
         const blocks = [] as ShardChainBlock[];
         while (blocks.length < ids.length) {
             if (db_index < 0) {
-                throw new Error(`Blocks not found: ${ids.filter(id => !blocks.find(b => b.id == id))}`)
+                throw new Error(`Blocks not found: ${ids.filter(id => !blocks.find(b => b.id == id)).join(", ")}`)
             }
 
             const cursor = await databases[db_index].db.query(query);
@@ -198,12 +197,12 @@ export class DistributedBmtDb {
                 const not_found_ids = chain_orders
                     .filter(c_o => !found_ids.find(id => c_o.id == id))
                     .map(c_o => c_o.id);
-                throw new Error(`Transactions not found: ${not_found_ids}`);
+                throw new Error(`Transactions not found: ${not_found_ids.join(", ")}`);
             }
         }
     }
 
-    async set_chain_order_for_block(block: Block, chain_order: string) {
+    async set_chain_order_for_block(block: Block, chain_order: string): Promise<void> {
         const query = aql`
             FOR b IN blocks
             FILTER b._key == ${block.id}
@@ -223,7 +222,7 @@ export class DistributedBmtDb {
         await db.db.query(query);
     }
 
-    async verify_block_and_transactions(block: Block) {
+    async verify_block_and_transactions(block: Block): Promise<void> {
         const transaction_ids = block.transactions.map(t => t.id);
         const query = aql`
             RETURN {
@@ -248,11 +247,22 @@ export class DistributedBmtDb {
         }
 
         const cursor = await db.db.query(query);
-        const queryResult = await cursor.next();
+        const queryResult = await cursor.next() as {
+            b_count: number,
+            t_count: number,
+        };
         if (queryResult.b_count != 1 || queryResult.t_count != transaction_ids.length) {
             throw new Error(`Not all data found for block with id ${block.id}`);
         }
     }
+}
+
+type DatabaseWithInfo = {
+    db: Database,
+    min_time: number,
+    max_time: number,
+    min_mc_seq_no: number | null,
+    max_mc_seq_no: number | null,
 }
 
 export type Transaction = {
