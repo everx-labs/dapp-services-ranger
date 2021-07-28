@@ -222,6 +222,37 @@ export class DistributedBmtDb {
 
         await db.db.query(query);
     }
+
+    async verify_block_and_transactions(block: Block) {
+        const transaction_ids = block.transactions.map(t => t.id);
+        const query = aql`
+            RETURN {
+                b_count: (
+                    FOR b IN blocks
+                    FILTER b._key == ${block.id}
+                    COLLECT WITH COUNT INTO c
+                    RETURN c)[0],
+                t_count: (
+                    FOR t IN transactions
+                    FILTER t._key IN ${transaction_ids}
+                    COLLECT WITH COUNT INTO c
+                    RETURN c)[0]
+            }
+        `;
+
+        const databases = await this.databases;
+        const db = databases.find(db => block.gen_utime >= db.min_time && block.gen_utime <= db.max_time);
+        
+        if (!db) {
+            throw new Error(`Database with time ${block.gen_utime} not found`);
+        }
+
+        const cursor = await db.db.query(query);
+        const queryResult = await cursor.next();
+        if (queryResult.b_count != 1 || queryResult.t_count != transaction_ids.length) {
+            throw new Error(`Not all data found for block with id ${block.id}`);
+        }
+    }
 }
 
 export type Transaction = {

@@ -111,6 +111,15 @@ export class ChainOrderer {
     }
 
     private async set_chain_order_for_bmt(bmt: Bmt): Promise<void> {
+        if (bmt.master_block.chain_order && 
+            bmt.shard_blocks.reduce((ok, block) => ok && !!block.chain_order, true)) {
+            // we reached the blocks chain-ordered by parser or
+            // the script failed between setting chain order and
+            // updating summary
+            this.verify_bmt(bmt);
+            return;
+        }
+
         const master_order = toU64String(bmt.master_block.seq_no);
 
         for (let b_i = 0; b_i < bmt.shard_blocks.length; b_i++) {
@@ -133,6 +142,15 @@ export class ChainOrderer {
         const master_block_order = master_order + "m";
         await this.set_chain_order_for_block_transactions(bmt.master_block, master_block_order);
         await this.dBmtDb.set_chain_order_for_block(bmt.master_block, master_block_order);
+    }
+
+    private async verify_bmt(bmt: Bmt) {        
+        for (let b_i = 0; b_i < bmt.shard_blocks.length; b_i++) {
+            const block = bmt.shard_blocks[b_i];
+            this.dBmtDb.verify_block_and_transactions(block);
+        }
+
+        this.dBmtDb.verify_block_and_transactions(bmt.master_block);
     }
 
     private async set_chain_order_for_block_transactions(block: Block, block_order: string): Promise<void> {
