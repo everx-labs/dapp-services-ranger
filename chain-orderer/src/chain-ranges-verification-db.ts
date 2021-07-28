@@ -12,13 +12,11 @@ export class ChainRangesVerificationDb {
     }
     
     async get_summary(): Promise<ChainRangesSummary> {
-        const query = aql`
+        const cursor = await this.database.query(aql`
             FOR doc IN chain_ranges_verification
             FILTER doc._key == "summary"
             RETURN doc
-        `;
-
-        const cursor = await this.database.query(query);
+        `);
         const result = await cursor.next() as ChainRangesSummary;
         if (!result) {
             throw new Error("Chain ranges summary not found");
@@ -29,7 +27,7 @@ export class ChainRangesVerificationDb {
     async update_verifyed_boundary(veryfied_master_seq_no: number): Promise<void> {
         const chain_order_boundary = toU64String(veryfied_master_seq_no + 1);
 
-        const query = aql`
+        await this.database.query(aql`
             UPDATE "summary" 
                 WITH { 
                     reliabe_chain_order_upper_boundary: ${chain_order_boundary},
@@ -37,9 +35,7 @@ export class ChainRangesVerificationDb {
                 }
                 IN chain_ranges_verification
                 OPTIONS { waitForSync: true }
-        `;
-
-        await this.database.query(query);
+        `);
     }
 
     async init_summary_if_not_exists(summary_to_init_with: ChainRangesSummary): Promise<void> {
@@ -47,7 +43,7 @@ export class ChainRangesVerificationDb {
             await this.database.createCollection("chain_ranges_verification");
         }
 
-        const insert_query = aql`
+        await this.database.query(aql`
             INSERT {
                 _key: "summary",
                 reliabe_chain_order_upper_boundary: ${summary_to_init_with.reliabe_chain_order_upper_boundary},
@@ -56,8 +52,7 @@ export class ChainRangesVerificationDb {
             } 
             INTO users 
             OPTIONS { waitForSync: true, overwriteMode: "ignore" }
-        `;
-        await this.database.query(insert_query);
+        `);
     }
 }
 

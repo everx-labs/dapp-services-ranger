@@ -1,6 +1,6 @@
 import { Config } from "arangojs/connection";
 import { Database, aql } from "arangojs";
-import { Bmt } from "./bmt";
+import { ChainRange } from "./chain-range";
 
 export class ChainRangesDb {
     readonly config: Config;
@@ -11,22 +11,21 @@ export class ChainRangesDb {
         this.database = new Database(config);
     }
     
-    async add_range(bmt: Bmt): Promise<void> {
+    async add_range(chain_range: ChainRange): Promise<void> {
         const range = {
-            _key: bmt.master_block.id,
+            _key: chain_range.master_block.id,
             master_block: {
-                id: bmt.master_block.id,
-                seq_no: bmt.master_block.seq_no,
+                id: chain_range.master_block.id,
+                seq_no: chain_range.master_block.seq_no,
             },
-            shard_block_ids: bmt.shard_blocks.map(sb => sb.id),
+            shard_block_ids: chain_range.shard_blocks.map(sb => sb.id),
         }
-        const query = aql`
+        
+        await this.database.query(aql`
             INSERT ${range} 
             INTO chain_ranges
             OPTIONS { waitForSync: true, overwriteMode: "ignore" }
-        `;
-
-        await this.database.query(query);
+        `);
     }
 
     async ensure_collection_exists(): Promise<void> {

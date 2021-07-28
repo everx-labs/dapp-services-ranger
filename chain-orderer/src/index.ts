@@ -10,7 +10,7 @@ void (async () => {
         const configPath = process.argv.length > 2 ? process.argv[2] : path.resolve(os.homedir(), ".tonlabs", "chain-orderer.config.json");
         const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as ChainOrdererConfig;
 
-        const chain_orderer = new ChainOrderer(config);
+        const chain_orderer = await ChainOrderer.create(config);
         await chain_orderer.run();
     } catch (e) {
         console.error(e);
