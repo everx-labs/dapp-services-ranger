@@ -112,7 +112,7 @@ export class ChainOrderer {
 
     private async set_chain_order_for_bmt(bmt: Bmt): Promise<void> {
         if (bmt.master_block.chain_order && 
-            bmt.shard_blocks.reduce((ok, block) => ok && !!block.chain_order, true)) {
+            bmt.shard_blocks.reduce((ok, block) => ok && Boolean(block.chain_order), true)) {
             // we reached the blocks chain-ordered by parser or
             // the script failed between setting chain order and
             // updating summary
@@ -223,7 +223,7 @@ const reverse_hex_symbol_map = (function () {
         const splitted = bit_string.split("");
         const reversedSplitted = splitted.reverse();
         const reversed_string = reversedSplitted.join("");
-        const reversed_number = +("0b" + reversed_string);
+        const reversed_number = parseInt(reversed_string, 2);
         
         result.set(i.toString(16), reversed_number.toString(16));
     }
