@@ -5,6 +5,7 @@ import { ChainRange } from "./chain-range";
 import { ChainRangesDb } from "./chain-ranges-db";
 import { ChainRangesVerificationDb } from "./chain-ranges-verification-db";
 import { DistributedBmtDb } from "./distributed-bmt-db";
+import { Reporter } from "./reporter";
 import { toU64String } from "./u64string";
 
 export class ChainOrderer {
@@ -39,8 +40,7 @@ export class ChainOrderer {
         const summary = await this.chain_ranges_verification_db.get_summary();
         let last_processed_mc_seq_no = summary.last_verified_master_seq_no;
 
-        const started_at = Date.now();
-        let last_report = Date.now();
+        const reporter = new Reporter();
         let previous_mc_block: MasterChainBlock | null = null;
         while (last_processed_mc_seq_no < max_mc_seq_no) {
             const chain_range: ChainRange = 
@@ -49,15 +49,11 @@ export class ChainOrderer {
             await this.process_chain_range(chain_range);
 
             last_processed_mc_seq_no++;
+            reporter.report_step(last_processed_mc_seq_no);
             previous_mc_block = chain_range.master_block;
-
-            if (Date.now() - last_report >= 1000) {
-                last_report = Date.now();
-                console.log(`${last_report - started_at} ms, mc_seq_no: ${last_processed_mc_seq_no}`);
-            }
         }
 
-        console.log(`Finished at seq_no ${last_processed_mc_seq_no}`);
+        reporter.report_finish(last_processed_mc_seq_no);
     }
 
     private async init_databases_and_process_first_mc_block_if_needed(): Promise<void> {
