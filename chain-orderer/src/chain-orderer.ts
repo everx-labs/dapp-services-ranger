@@ -22,12 +22,12 @@ export class ChainOrderer {
     }
 
     static async create(config: ChainOrdererConfig): Promise<ChainOrderer> {
-        if (!config.bmt_databases || !config.chain_ranges_database || !config.chain_ranges_verifying_database) {
+        if (!config.bmt_databases || !config.chain_ranges_database || !config.chain_ranges_verification_database) {
             throw new Error("There are parameters missing in config");
         }
 
         const distributed_bmt_db = await DistributedBmtDb.create(config.bmt_databases);
-        const chain_ranges_verification_db = new ChainRangesVerificationDb(config.chain_ranges_verifying_database);
+        const chain_ranges_verification_db = new ChainRangesVerificationDb(config.chain_ranges_verification_database);
         const chain_ranges_db = new ChainRangesDb(config.chain_ranges_database);
 
         return new ChainOrderer(distributed_bmt_db, chain_ranges_verification_db, chain_ranges_db);
@@ -210,7 +210,7 @@ export class ChainOrderer {
 export type ChainOrdererConfig = {
     bmt_databases: Config[],
     chain_ranges_database: Config,
-    chain_ranges_verifying_database: Config,
+    chain_ranges_verification_database: Config,
 }
 
 function shard_to_reversed_to_U64String(shard: string) {
