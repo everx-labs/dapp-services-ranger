@@ -9,6 +9,7 @@ import {
 
 export class DistributedBmtDb {
     readonly databases: BmtDb[];
+    last_refresh = Date.now();
 
     private constructor(databases: BmtDb[]) {
         this.databases = [...databases];
@@ -98,6 +99,7 @@ export class DistributedBmtDb {
     }
 
     async refresh_databases(): Promise<void> {
+        this.last_refresh = Date.now();
         await Promise.all(
             this.databases.map(db => db.update_summary())
         );

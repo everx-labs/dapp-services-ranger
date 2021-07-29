@@ -36,7 +36,7 @@ export class ChainOrderer {
     async run(): Promise<void> {
         await this.init_databases_and_process_first_mc_block_if_needed();
 
-        const max_mc_seq_no = this.distributed_bmt_db.get_max_mc_seq_no();
+        let max_mc_seq_no = this.distributed_bmt_db.get_max_mc_seq_no();
         const summary = await this.chain_ranges_verification_db.get_summary();
         let last_processed_mc_seq_no = summary.last_verified_master_seq_no;
 
@@ -51,6 +51,11 @@ export class ChainOrderer {
             last_processed_mc_seq_no++;
             reporter.report_step(last_processed_mc_seq_no);
             previous_mc_block = chain_range.master_block;
+
+            if (Date.now() - this.distributed_bmt_db.last_refresh > 60000) {
+                await this.distributed_bmt_db.refresh_databases();
+                max_mc_seq_no = this.distributed_bmt_db.get_max_mc_seq_no();
+            }
         }
 
         reporter.report_finish(last_processed_mc_seq_no);
