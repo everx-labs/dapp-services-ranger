@@ -39,6 +39,7 @@ export class ChainOrderer {
         const summary = await this.chain_ranges_verification_db.get_summary();
         let last_processed_mc_seq_no = summary.last_verified_master_seq_no;
 
+        const started_at = Date.now();
         let last_report = Date.now();
         let previous_mc_block: MasterChainBlock | null = null;
         while (last_processed_mc_seq_no < max_mc_seq_no) {
@@ -52,7 +53,7 @@ export class ChainOrderer {
 
             if (Date.now() - last_report >= 1000) {
                 last_report = Date.now();
-                console.log(last_processed_mc_seq_no);
+                console.log(`${last_report - started_at} ms, mc_seq_no: ${last_processed_mc_seq_no}`);
             }
         }
 
