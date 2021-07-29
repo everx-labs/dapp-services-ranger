@@ -26,7 +26,7 @@ export class BmtDb {
         return await cursor.all() as Block[];
     }
 
-    async find_existant_transaction_ids(ids: string[]): Promise<string[]> {
+    async find_existing_transaction_ids(ids: string[]): Promise<string[]> {
         const cursor = await this.arango_db.query(aql`
             FOR t IN transactions
                 FILTER t._key IN ${ids}

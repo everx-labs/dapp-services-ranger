@@ -36,22 +36,22 @@ export class Ranger {
 
     private async ensure_chain_range_is_in_bmt_db(chain_range: ChainRange): Promise<void> {
         let block_ids_to_check = [chain_range.master_block.id, ...chain_range.shard_block_ids];
-        let transcation_id_to_check = [] as string[];
+        let transaction_ids_to_check = [] as string[];
 
         while (true) {
             const delayPromise = delay(this.database_polling_period);
             if (block_ids_to_check.length > 0) {
                 const blocks = await this.bmt_db.find_blocks_by_ids(block_ids_to_check);
                 this.ensure_chain_range_on_blocks(blocks);
-                transcation_id_to_check = transcation_id_to_check.concat(...blocks.map(b => b.transaction_ids));
+                transaction_ids_to_check = transaction_ids_to_check.concat(...blocks.map(b => b.transaction_ids));
                 block_ids_to_check = block_ids_to_check.filter(id => !blocks.find(b => b.id == id));
             }
-            if (transcation_id_to_check.length > 0) {
-                const transaction_ids = await this.find_existant_transaction_ids(transcation_id_to_check);
-                transcation_id_to_check = transcation_id_to_check.filter(id => !transaction_ids.find(id2 => id2 == id));
+            if (transaction_ids_to_check.length > 0) {
+                const transaction_ids = new Set(await this.find_existing_transaction_ids(transaction_ids_to_check));
+                transaction_ids_to_check = transaction_ids_to_check.filter(id => !transaction_ids.has(id));
             }
 
-            if (block_ids_to_check.length == 0 && transcation_id_to_check.length == 0) {
+            if (block_ids_to_check.length == 0 && transaction_ids_to_check.length == 0) {
                 break;
             } else {
                 await delayPromise;
@@ -66,12 +66,12 @@ export class Ranger {
         }
     }
 
-    private async find_existant_transaction_ids(ids: string[]): Promise<string[]> {
+    private async find_existing_transaction_ids(ids: string[]): Promise<string[]> {
         let start_index = 0;
         let result = [] as string[];
         while (start_index < ids.length) {
             const ids_to_check = ids.slice(start_index, start_index + this.max_transaction_ids_per_request);
-            result = result.concat(await this.bmt_db.find_existant_transaction_ids(ids_to_check));
+            result = result.concat(await this.bmt_db.find_existing_transaction_ids(ids_to_check));
             start_index += this.max_transaction_ids_per_request;
         }
 
