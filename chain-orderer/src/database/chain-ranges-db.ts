@@ -1,6 +1,6 @@
 import { Config } from "arangojs/connection";
 import { Database, aql } from "arangojs";
-import { ChainRange } from "./chain-range";
+import { ChainRangeExtended } from "./chain-range-extended";
 
 export class ChainRangesDb {
     readonly config: Config;
@@ -11,7 +11,7 @@ export class ChainRangesDb {
         this.database = new Database(config);
     }
     
-    async add_range(chain_range: ChainRange): Promise<void> {
+    async add_range(chain_range: ChainRangeExtended): Promise<void> {
         const range = {
             _key: chain_range.master_block.id,
             master_block: {
@@ -28,6 +28,17 @@ export class ChainRangesDb {
         `);
     }
 
+    async get_range_by_mc_seq_no(mc_seq_no: number): Promise<ChainRange | null> {
+        const cursor = await this.database.query(aql`
+            FOR cr IN chain_ranges
+                FILTER cr.master_block.seq_no == ${mc_seq_no}
+                RETURN cr
+        `);
+
+        const result = await cursor.next() as ChainRange | null;
+        return result;        
+    }
+
     async ensure_collection_ready(): Promise<void> {
         if (!await this.database.collection("chain_ranges").exists()) {
             await this.database.createCollection("chain_ranges");
@@ -37,4 +48,13 @@ export class ChainRangesDb {
             fields: [ "master_block.seq_no" ],
         });
     }
+}
+
+export type ChainRange = {
+    _key: string,
+    master_block: {
+        id: string,
+        seq_no: number,
+    },
+    shard_blocks_ids: string[],
 }

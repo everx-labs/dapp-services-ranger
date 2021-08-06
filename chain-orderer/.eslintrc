@@ -15,6 +15,7 @@
   ],
   "rules": {
     "curly": "error",
+    "eol-last": "warn",
     "no-implicit-coercion": "warn"
   }
 }

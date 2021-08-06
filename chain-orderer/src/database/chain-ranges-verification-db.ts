@@ -1,6 +1,6 @@
 import { Config } from "arangojs/connection";
 import { Database, aql } from "arangojs";
-import { toU64String } from "./u64string";
+import { toU64String } from "../u64string";
 
 export class ChainRangesVerificationDb {
     readonly config: Config;

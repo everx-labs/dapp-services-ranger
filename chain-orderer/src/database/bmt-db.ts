@@ -135,6 +135,25 @@ export class BmtDb {
         }
     }
 
+    async get_transactions_chain_orders_by_ids(ids: string[]): Promise<ChainOrderedTransaction[]> {
+        const cursor = await this.arango_db.query(aql`
+            FOR t IN transactions
+                FILTER t._key IN ${ids}
+                RETURN {
+                    "id": t._key,
+                    "chain_order": t.chain_order,
+                }
+        `);
+        const transactions = await cursor.all() as ChainOrderedTransaction[];
+        if (transactions.length != ids.length) {
+            const not_found_ids = ids
+                .filter(id => !transactions.find(t => t.id == id));
+            throw new Error(`Transactions not found: ${not_found_ids.join(", ")}`);
+        }
+        
+        return transactions;
+    }
+
     async set_chain_order_for_block(block: Block, chain_order: string): Promise<void> {
         await this.arango_db.query(aql`
             FOR b IN blocks
@@ -146,7 +165,7 @@ export class BmtDb {
         `);
     }
 
-    async verify_block_and_transactions(block: Block): Promise<void> {
+    async verify_block_and_transactions_existance(block: Block): Promise<void> {
         const transaction_ids = block.transactions.map(t => t.id);
         const cursor = await this.arango_db.query(aql`
             RETURN {
