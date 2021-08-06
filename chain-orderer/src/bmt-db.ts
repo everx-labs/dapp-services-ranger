@@ -84,7 +84,7 @@ export class BmtDb {
         const block = await cursor.next() as MasterChainBlock | null;
 
         if (!block) {
-            throw new Error(`Block with ${seq_no} not found`);
+            throw new Error(`Masterblock with seq_no ${seq_no} not found`);
         }
 
         return block;
@@ -166,8 +166,11 @@ export class BmtDb {
             b_count: number,
             t_count: number,
         };
-        if (queryResult.b_count != 1 || queryResult.t_count != transaction_ids.length) {
-            throw new Error(`Not all data found for block with id ${block.id}`);
+        if (queryResult.b_count != 1) {
+            throw new Error(`Block with id ${block.id} not found. Time: ${block.gen_utime}.`);
+        }
+        if (queryResult.t_count != transaction_ids.length) {
+            throw new Error(`While verifying block with id ${block.id} expected ${transaction_ids.length} transactions but got ${queryResult.t_count}. Time: ${block.gen_utime}.`);
         }
     }
 }

@@ -65,10 +65,9 @@ export class ChainOrderer {
         await this.chain_ranges_verification_db.init_summary_if_not_exists({
             reliabe_chain_order_upper_boundary: "01",
             last_verified_master_seq_no: 0,
-            workchain_ids: [-1, 0],
         });
 
-        await this.chain_ranges_db.ensure_collection_exists();
+        await this.chain_ranges_db.ensure_collection_ready();
 
         const summary = await this.chain_ranges_verification_db.get_summary();
         if (summary.last_verified_master_seq_no == 0) {

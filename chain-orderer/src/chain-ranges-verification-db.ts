@@ -48,9 +48,8 @@ export class ChainRangesVerificationDb {
                 _key: "summary",
                 reliabe_chain_order_upper_boundary: ${summary_to_init_with.reliabe_chain_order_upper_boundary},
                 last_verified_master_seq_no: ${summary_to_init_with.last_verified_master_seq_no},
-                workchain_ids: ${summary_to_init_with.workchain_ids},
             } 
-            INTO users 
+            INTO chain_ranges_verification 
             OPTIONS { waitForSync: true, overwriteMode: "ignore" }
         `);
     }
@@ -59,5 +58,4 @@ export class ChainRangesVerificationDb {
 export type ChainRangesSummary = {
     reliabe_chain_order_upper_boundary: string, // for convenience of q-server
     last_verified_master_seq_no: number, // for convenience of ranger
-    workchain_ids: number[], // configuration of ranger
 }

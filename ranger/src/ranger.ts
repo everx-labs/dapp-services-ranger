@@ -2,6 +2,7 @@ import { Config } from "arangojs/connection";
 import { Block, BmtDb } from "./bmt-db";
 import { ChainRange, ChainRangesDb } from "./chain-ranges-db";
 import { ChainRangesVerificationDb } from "./chain-ranges-verification-db";
+import { Reporter } from "./reporter";
 
 export class Ranger {
     readonly bmt_db: BmtDb;
@@ -21,6 +22,7 @@ export class Ranger {
     async run(): Promise<void> {
         const summary = await this.chain_ranges_verification_db.get_summary();
         let last_verified_master_seq_no = summary.last_verified_master_seq_no;
+        const reporter = new Reporter();
 
         while (true) {
             const chain_range = await this.chain_ranges_db.get_range_by_mc_seq_no(last_verified_master_seq_no + 1);
@@ -31,11 +33,12 @@ export class Ranger {
             await this.ensure_chain_range_is_in_bmt_db(chain_range);
             await this.chain_ranges_verification_db.update_verifyed_boundary(last_verified_master_seq_no + 1);
             last_verified_master_seq_no++;
+            reporter.report(last_verified_master_seq_no);
         }
     }
 
     private async ensure_chain_range_is_in_bmt_db(chain_range: ChainRange): Promise<void> {
-        let block_ids_to_check = [chain_range.master_block.id, ...chain_range.shard_block_ids];
+        let block_ids_to_check = [chain_range.master_block.id, ...chain_range.shard_blocks_ids];
         let transaction_ids_to_check = [] as string[];
 
         while (true) {

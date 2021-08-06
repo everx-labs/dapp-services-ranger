@@ -18,7 +18,7 @@ export class ChainRangesDb {
                 id: chain_range.master_block.id,
                 seq_no: chain_range.master_block.seq_no,
             },
-            shard_block_ids: chain_range.shard_blocks.map(sb => sb.id),
+            shard_blocks_ids: chain_range.shard_blocks.map(sb => sb.id),
         }
         
         await this.database.query(aql`
@@ -28,13 +28,13 @@ export class ChainRangesDb {
         `);
     }
 
-    async ensure_collection_exists(): Promise<void> {
+    async ensure_collection_ready(): Promise<void> {
         if (!await this.database.collection("chain_ranges").exists()) {
             await this.database.createCollection("chain_ranges");
-            await this.database.collection("chain_ranges").ensureIndex({
-                type: "persistent",
-                fields: [ "master_block.seq_no" ],
-            });
         }
+        await this.database.collection("chain_ranges").ensureIndex({
+            type: "persistent",
+            fields: [ "master_block.seq_no" ],
+        });
     }
 }

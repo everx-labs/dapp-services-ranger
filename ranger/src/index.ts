@@ -7,7 +7,7 @@ import { Ranger, RangerConfig } from "./ranger";
 
 void (async () => {
     try { 
-        const configPath = process.argv.length > 2 ? process.argv[2] : path.resolve(os.homedir(), ".tonlabs", "chain-orderer.config.json");
+        const configPath = process.argv.length > 2 ? process.argv[2] : path.resolve(os.homedir(), ".tonlabs", "ranger.config.json");
         const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as RangerConfig;
 
         const ranger = new Ranger(config);

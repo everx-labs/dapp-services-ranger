@@ -28,5 +28,5 @@ export type ChainRange = {
         id: string,
         seq_no: number,
     },
-    shard_block_ids: string[],
+    shard_blocks_ids: string[],
 }
