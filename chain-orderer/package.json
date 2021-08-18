@@ -11,7 +11,8 @@
 	"scripts": {
 		"build": "eslint . --ext .ts && tsc",
 		"lint": "eslint . --ext .ts",
-		"prepublishOnly": "npm i && eslint . --ext .ts && tsc"
+		"prepublishOnly": "npm i && eslint . --ext .ts && tsc",
+		"run": "node dist/index.js"
 	},
 	"publishConfig": {
 		"access": "public"

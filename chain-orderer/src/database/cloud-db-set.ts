@@ -40,7 +40,7 @@ export class CloudDbSet {
 
     async ensure_chain_range_dbs_ready(): Promise<void> {
         await this.chain_ranges_verification_db.init_summary_if_not_exists({
-            reliabe_chain_order_upper_boundary: "01",
+            reliable_chain_order_upper_boundary: "01",
             last_verified_master_seq_no: 0,
         });
 

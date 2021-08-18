@@ -30,8 +30,8 @@ export class ChainRangesVerificationDb {
         await this.database.query(aql`
             UPDATE "summary" 
                 WITH { 
-                    reliabe_chain_order_upper_boundary: ${chain_order_boundary},
                     last_verified_master_seq_no: ${veryfied_master_seq_no},
+                    reliable_chain_order_upper_boundary: ${chain_order_boundary},
                 }
                 IN chain_ranges_verification
                 OPTIONS { waitForSync: true }
@@ -46,8 +46,8 @@ export class ChainRangesVerificationDb {
         await this.database.query(aql`
             INSERT {
                 _key: "summary",
-                reliabe_chain_order_upper_boundary: ${summary_to_init_with.reliabe_chain_order_upper_boundary},
                 last_verified_master_seq_no: ${summary_to_init_with.last_verified_master_seq_no},
+                reliable_chain_order_upper_boundary: ${summary_to_init_with.reliable_chain_order_upper_boundary},
             } 
             INTO chain_ranges_verification 
             OPTIONS { waitForSync: true, overwriteMode: "ignore" }
@@ -56,6 +56,6 @@ export class ChainRangesVerificationDb {
 }
 
 export type ChainRangesSummary = {
-    reliabe_chain_order_upper_boundary: string, // for convenience of q-server
     last_verified_master_seq_no: number, // for convenience of ranger
+    reliable_chain_order_upper_boundary: string, // for convenience of q-server
 }
