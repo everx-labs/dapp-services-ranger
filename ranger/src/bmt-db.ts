@@ -15,6 +15,28 @@ export class BmtDb {
                 RETURN { 
                     "id": b._key,
                     "chain_order": b.chain_order,
+                    "message_ids": (
+                        FOR m_id IN UNION_DISTINCT(
+                            // OutMsg::Immediately, OutMsg::New
+                            FOR m IN b.out_msg_descr
+                                FILTER m.msg_type == 1 || m.msg_type == 2
+                                RETURN m.out_msg.msg_id,
+                            
+                            // OutMsg::External
+                            FOR m IN b.out_msg_descr
+                                FILTER m.msg_type == 0
+                                RETURN m.msg_id,
+                            
+                            // InMsg::External
+                            FOR m IN b.in_msg_descr
+                                FILTER m.msg_type == 0
+                                RETURN m.msg_id,
+                            
+                            // special messages with src "-1:00..00"
+                            [b.master.recover_create_msg.in_msg.msg_id, b.master.mint_msg.in_msg.msg_id]
+                        )
+                            FILTER m_id != null
+                            RETURN m_id),
                     "transaction_ids": (
                         FOR a_b IN b.account_blocks || []
                             FOR t IN a_b.transactions
@@ -26,19 +48,29 @@ export class BmtDb {
         return await cursor.all() as Block[];
     }
 
-    async find_existing_transaction_ids(ids: string[]): Promise<string[]> {
+    async find_existing_mt_ids(messages: string[], transactions: string[]): Promise<{ transactions: string[], messages: string[]}> {
         const cursor = await this.arango_db.query(aql`
-            FOR t IN transactions
-                FILTER t._key IN ${ids}
-                RETURN t._key
+            RETURN {
+                messages: (
+                    FOR m IN messages
+                    FILTER m._key IN ${messages}
+                    RETURN m._key
+                ),
+                transactions: (
+                    FOR t IN transactions
+                    FILTER t._key IN ${transactions}
+                    RETURN t._key
+                ),
+            }
         `);
-
-        return await cursor.all() as string[];
+        const result = await cursor.all() as { transactions: string[], messages: string[]}[];
+        return result[0];
     }
 }
 
 export type Block = {
     id: string,
     chain_order: string | null,
+    message_ids: string[],
     transaction_ids: string[],
 };
