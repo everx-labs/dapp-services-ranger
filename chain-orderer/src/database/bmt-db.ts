@@ -60,7 +60,7 @@ export class BmtDb {
     async get_masterchain_block_by_seq_no(seq_no: number): Promise<MasterChainBlock> {
         const cursor = await this.arango_db.query(`
             FOR b IN blocks
-                FILTER b.workchain_id == -1 && b.seq_no == ${seq_no}
+                FILTER b.workchain_id == -1 && b.seq_no == ${seq_no} && !b.technical_fork
                 LET message_ids = (
                     FOR m_id IN UNION_DISTINCT(
                         // OutMsg::Immediately, OutMsg::New
@@ -129,7 +129,7 @@ export class BmtDb {
     async find_shardchain_blocks_by_ids(ids: string[]): Promise<ShardChainBlock[]> {
         const cursor = await this.arango_db.query(aql`
             FOR b IN blocks
-                FILTER b._key IN ${ids} && b.workchain_id != -1
+                FILTER b._key IN ${ids} && b.workchain_id != -1 && !b.technical_fork
                 LET message_ids = (
                     FOR m_id IN UNION_DISTINCT(
                         // OutMsg::Immediately, OutMsg::New
