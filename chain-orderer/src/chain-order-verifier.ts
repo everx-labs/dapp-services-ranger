@@ -40,32 +40,7 @@ export class ChainOrderVerifier {
     }
 
     private async process_chain_range(chain_range: ChainRangeExtended): Promise<void> {
-        await this.verify_range_in_chain_ranges_db(chain_range);
         await this.verify_chain_order_for_range(chain_range);
-    }
-
-    async verify_range_in_chain_ranges_db(chain_range_ex: ChainRangeExtended): Promise<void> {
-        const chain_range = await this.db_set.chain_ranges_db
-            .get_range_by_mc_seq_no(chain_range_ex.master_block.seq_no);
-
-        if (!chain_range) {
-            throw new Error(`Chain range with seq_no ${chain_range_ex.master_block.seq_no} not found`);
-        }
-        if (chain_range.master_block.id != chain_range_ex.master_block.id) {
-            throw new Error(`Chain range inconsistent for seq_no ${chain_range_ex.master_block.seq_no}: ` +
-                `id ${chain_range.master_block.id} in chain_ranges and ${chain_range_ex.master_block.id} in blocks`);
-        }
-        const shard_block_ids_cr = [...chain_range.shard_blocks_ids];
-        const shard_block_ids_b = chain_range_ex.shard_blocks.map(b => b.id);
-        const shard_block_ids_cr_set = new Set(shard_block_ids_cr);
-        const shard_block_ids_b_set = new Set(shard_block_ids_b);
-        const cr_inconsistency = shard_block_ids_cr.filter(id => !shard_block_ids_b_set.has(id));
-        const b_inconsistency = shard_block_ids_b.filter(id => !shard_block_ids_cr_set.has(id));
-        if (cr_inconsistency.length || b_inconsistency.length) {
-            throw new Error(`Chain range inconsistent for seq_no ${chain_range_ex.master_block.seq_no}:\n` +
-                `${cr_inconsistency.length ? `chain_ranges has more shard_blocks: ${cr_inconsistency.join(', ')}\n` : ''}` +
-                `${b_inconsistency.length ? `blocks has more shard_blocks: ${cr_inconsistency.join(', ')}\n` : ''}`)
-        }
     }
 
     private async verify_chain_order_for_range(chain_range: ChainRangeExtended): Promise<void> {
@@ -126,7 +101,6 @@ export class ChainOrderVerifier {
 
 export type ChainOrderVerifierConfig = {
     bmt_databases: Config[],
-    chain_ranges_database: Config,
     chain_ranges_verification_database: Config,
     only_verify_from_seq_no: number,
 }

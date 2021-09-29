@@ -164,4 +164,10 @@ export class DistributedBmtDb {
             return db.summary.max_time;
         }, -1);
     }
+
+    async ensure_bmt_chain_order_indexes(): Promise<void> {
+        await Promise.all(
+            this.databases.map(db => db.ensure_bmt_chain_order_indexes())
+        );
+    }
 }

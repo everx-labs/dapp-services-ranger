@@ -295,6 +295,20 @@ export class BmtDb {
             throw new Error(`While verifying block with id ${block.id} expected ${transaction_ids.length} transactions but got ${queryResult.t_count}. Time: ${block.gen_utime}.`);
         }
     }
+
+    async ensure_bmt_chain_order_indexes(): Promise<void> {
+        const blocks = this.arango_db.collection("blocks");
+        await blocks.ensureIndex({ type: "persistent", fields: ["chain_order"]});
+        await blocks.ensureIndex({ type: "persistent", fields: ["gen_utime", "chain_order"]});
+
+        const transactions = this.arango_db.collection("transactions");
+        await transactions.ensureIndex({ type: "persistent", fields: ["chain_order"]});
+        await transactions.ensureIndex({ type: "persistent", fields: ["account_addr", "chain_order"]});
+        await transactions.ensureIndex({ type: "persistent", fields: ["workchain_id", "chain_order"]});
+
+        const messages = this.arango_db.collection("messages");
+        await messages.ensureIndex({ type: "persistent", fields: ["chain_order"]});
+    }
 }
 
 export type DbSummary = {

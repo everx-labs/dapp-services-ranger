@@ -38,6 +38,8 @@ export class ChainOrderer {
             previous_mc_block = chain_range.master_block;
         }
 
+        await this.db_set.ensure_bmt_chain_order_indexes();
+
         reporter.report_finish(last_processed_mc_seq_no);
     }
 
@@ -56,7 +58,6 @@ export class ChainOrderer {
     }
 
     private async process_chain_range(chain_range: ChainRangeExtended): Promise<void> {
-        await this.db_set.chain_ranges_db.add_range(chain_range);
         await this.set_chain_order_for_range(chain_range);
         await this.update_summary(chain_range);
     }
@@ -117,6 +118,5 @@ export class ChainOrderer {
 
 export type ChainOrdererConfig = {
     bmt_databases: Config[],
-    chain_ranges_database: Config,
     chain_ranges_verification_database: Config,
 }
