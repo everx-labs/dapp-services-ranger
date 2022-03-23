@@ -85,21 +85,29 @@ export class ChainOrderer {
                 throw new Error("Impossible exception in set_chain_order_for_range");
             }
 
-            await this.db_set.distributed_bmt_db.set_transaction_chain_orders(block_chain_orders.transactions, block.gen_utime);
+            await this.db_set.distributed_bmt_db.set_mt_chain_orders(
+                block_chain_orders.messages,
+                block_chain_orders.transactions, 
+                block.gen_utime);
+                
             await this.db_set.distributed_bmt_db.set_chain_order_for_block(block, block_chain_orders.chain_order);
         }
 
-        await this.db_set.distributed_bmt_db.set_transaction_chain_orders(chain_orders.master_block.transactions, chain_range.master_block.gen_utime);
+        await this.db_set.distributed_bmt_db.set_mt_chain_orders(
+            chain_orders.master_block.messages,
+            chain_orders.master_block.transactions, 
+            chain_range.master_block.gen_utime);
+            
         await this.db_set.distributed_bmt_db.set_chain_order_for_block(chain_range.master_block, chain_orders.master_block.chain_order);
     }
 
     private async verify_chain_range(chain_range: ChainRangeExtended) {        
         for (let b_i = 0; b_i < chain_range.shard_blocks.length; b_i++) {
             const block = chain_range.shard_blocks[b_i];
-            await this.db_set.distributed_bmt_db.verify_block_and_transactions_existance(block);
+            await this.db_set.distributed_bmt_db.verify_bmt_existance_for_block(block);
         }
 
-        await this.db_set.distributed_bmt_db.verify_block_and_transactions_existance(chain_range.master_block);
+        await this.db_set.distributed_bmt_db.verify_bmt_existance_for_block(chain_range.master_block);
     }
 
     private async update_summary(chain_range: ChainRangeExtended): Promise<void> {

@@ -1,4 +1,4 @@
-import { Block, ChainOrderedTransaction } from "./database/bmt-db";
+import { Block, ChainOrderedEntity } from "./database/bmt-db";
 import { ChainRangeExtended } from "./database/chain-range-extended";
 import { toU64String } from "./u64string";
 
@@ -11,6 +11,7 @@ export class ChainOrderUtils {
                 id: chain_range.master_block.id,
                 chain_order: `${master_order}m`,
                 transactions: this.get_transactions_chain_orders_for_block(`${master_order}m`, chain_range.master_block),
+                messages: this.get_messages_chain_orders_for_block(`${master_order}m`, chain_range.master_block),
             },
             shard_blocks: new Map(chain_range.shard_blocks.map(block => {
                 const workchain_order = block.workchain_id >= 0 ? toU64String(block.workchain_id) : toU64String(-block.workchain_id);
@@ -25,13 +26,14 @@ export class ChainOrderUtils {
                         id: block.id,
                         chain_order: block_order,
                         transactions: this.get_transactions_chain_orders_for_block(block_order, block),
+                        messages: this.get_messages_chain_orders_for_block(block_order, block),
                     }
                 ];
             })),
         }
     }
 
-    private static get_transactions_chain_orders_for_block(block_order: string, block: Block): ChainOrderedTransaction[] {
+    private static get_transactions_chain_orders_for_block(block_order: string, block: Block): ChainOrderedEntity[] {
         const transactions = [...block.transactions];
         transactions.sort((t1, t2) => {
             if (t1.lt < t2.lt) {
@@ -58,18 +60,55 @@ export class ChainOrderUtils {
             };
         });
     }
+
+    
+    private static get_messages_chain_orders_for_block(block_order: string, block: Block): ChainOrderedEntity[] {
+        if (!block.messages) {
+            throw new Error("Messages isn't loaded for block");
+        }
+
+        const messages = [...block.messages];
+        messages.sort((m1, m2) => {
+            const lt1 = m1.created_lt ?? "";
+            const lt2 = m2.created_lt ?? "";
+            if (lt1 < lt2) {
+                return -1;
+            }
+            if (lt1 > lt2) {
+                return 1;
+            }
+            
+            if (m1.id < m2.id) {
+                return -1;
+            }
+            if (m1.id > m2.id) {
+                return 1;
+            }
+
+            throw new Error(`Duplicate message created_lt (${m1.created_lt ?? "null"}) and id (${m1.id})`);
+        });
+
+        return messages.map((t, index) => {
+            return {
+                id: t.id,
+                chain_order: `${block_order}${toU64String(index)}`,
+            };
+        });
+    }
 }
 
 export type ChainRangeChainOrders = {
     master_block: {
         id: string,
         chain_order: string,
-        transactions: ChainOrderedTransaction[],
+        transactions: ChainOrderedEntity[],
+        messages: ChainOrderedEntity[],
     },
     shard_blocks: Map<string, {
         id: string,
         chain_order: string,
-        transactions: ChainOrderedTransaction[],
+        transactions: ChainOrderedEntity[],
+        messages: ChainOrderedEntity[],
     }>,
 };
 

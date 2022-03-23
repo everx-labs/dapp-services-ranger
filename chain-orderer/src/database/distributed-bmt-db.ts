@@ -2,8 +2,8 @@ import { Config } from "arangojs/connection";
 import { 
     Block,
     BmtDb, 
-    ChainOrderedTransaction, 
-    MasterChainBlock, 
+    ChainOrderedEntity, 
+    MasterChainBlock,
     ShardChainBlock 
 } from "./bmt-db";
 import { ChainRangeExtended } from "./chain-range-extended";
@@ -117,12 +117,12 @@ export class DistributedBmtDb {
         };
     }
 
-    async set_transaction_chain_orders(chain_orders: ChainOrderedTransaction[], time: number): Promise<void> {
+    async set_mt_chain_orders(messages: ChainOrderedEntity[], transactions: ChainOrderedEntity[], time: number): Promise<void> {
         const db = this.get_db_by_time(time);
-        await db.set_transaction_chain_orders(chain_orders);
+        await db.set_mt_chain_orders(messages, transactions);
     }
 
-    async get_transactions_chain_orders_for_block(block: Block): Promise<ChainOrderedTransaction[]> {
+    async get_transactions_chain_orders_for_block(block: Block): Promise<ChainOrderedEntity[]> {
         const db = this.get_db_by_time(block.gen_utime);
         return await db.get_transactions_chain_orders_by_ids(block.transactions.map(t => t.id));
     }
@@ -132,9 +132,9 @@ export class DistributedBmtDb {
         await db.set_chain_order_for_block(block, chain_order);
     }
 
-    async verify_block_and_transactions_existance(block: Block): Promise<void> {
+    async verify_bmt_existance_for_block(block: Block): Promise<void> {
         const db = this.get_db_by_time(block.gen_utime);
-        await db.verify_block_and_transactions_existance(block);
+        await db.verify_bmt_existance_for_block(block);
     }
 
     get_db_by_time(time: number): BmtDb {

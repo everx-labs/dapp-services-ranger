@@ -1,6 +1,6 @@
 import { Config } from "arangojs/connection";
 import { ChainOrderUtils } from "./chain-order-utils";
-import { Block, ChainOrderedTransaction, MasterChainBlock } from "./database/bmt-db";
+import { Block, ChainOrderedEntity, MasterChainBlock } from "./database/bmt-db";
 import { ChainRangeExtended } from "./database/chain-range-extended";
 import { CloudDbSet } from "./database/cloud-db-set";
 import { Reporter } from "./reporter";
@@ -82,6 +82,7 @@ export class ChainOrderVerifier {
             }
 
             await this.verify_chain_orders_on_transactions(block, block_chain_orders.transactions);
+            this.verify_chain_orders_on_messages(block, block_chain_orders.messages);
         }
 
         if (chain_orders.master_block.chain_order != chain_range.master_block.chain_order) {
@@ -89,13 +90,14 @@ export class ChainOrderVerifier {
         }
 
         await this.verify_chain_orders_on_transactions(chain_range.master_block, chain_orders.master_block.transactions);
+        this.verify_chain_orders_on_messages(chain_range.master_block, chain_orders.master_block.messages);
     }
     
-    async verify_chain_orders_on_transactions(block: Block, chain_ordered_transactions: ChainOrderedTransaction[]): Promise<void> {
+    async verify_chain_orders_on_transactions(block: Block, chain_ordered_transactions: ChainOrderedEntity[]): Promise<void> {
         const transactions_chain_orders_fact = 
-        await this.db_set.distributed_bmt_db
-            .get_transactions_chain_orders_for_block(block);
-    
+            await this.db_set.distributed_bmt_db
+                .get_transactions_chain_orders_for_block(block);
+        
         const transactions_chain_orders_expected =
             new Map(chain_ordered_transactions.map(t_co => [t_co.id, t_co.chain_order]));
 
@@ -104,6 +106,19 @@ export class ChainOrderVerifier {
             const expected = transactions_chain_orders_expected.get(t_co.id);
             if (fact != expected) {
                 throw new Error(`Invalid chain_order for transaction ${t_co.id}: expected ${expected ?? 'null'} but got ${fact}`);
+            }
+        }
+    }
+    
+    verify_chain_orders_on_messages(block: Block, chain_ordered_messages: ChainOrderedEntity[]): void {
+        const messages_chain_orders_expected =
+            new Map(chain_ordered_messages.map(m_co => [m_co.id, m_co.chain_order]));
+
+        for (const m of block.messages) {
+            const fact = m.chain_order;
+            const expected = messages_chain_orders_expected.get(m.id);
+            if (fact != expected || !fact) {
+                throw new Error(`Invalid chain_order for message ${m.id}: expected ${expected ?? 'none'} but got ${fact ?? 'null'}`);
             }
         }
     }
