@@ -1,0 +1,14 @@
+version: '2.3'
+services:
+  chain_orderer:
+    image: node:14
+    container_name: chain_orderer
+    restart: "no"
+    #user: "node"
+    working_dir: /home/node/app
+    volumes:
+      - ./:/home/node/app
+      - ./config.json:/root/.tonlabs/chain-orderer.config.json
+    command: sh -c "npm i && npx tsc && node ./dist/index.js"
+    # command: sh -c "node ./dist/index.js"
+    network_mode: host

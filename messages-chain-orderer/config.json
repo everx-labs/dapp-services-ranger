@@ -1,0 +1,9 @@
+{
+  "bmt_databases": [
+    {
+      "url": "http://localhost:8520",
+      "databaseName": "blockchain"
+    }
+  ],
+  "chain_order_to_start_from": "g"
+}
