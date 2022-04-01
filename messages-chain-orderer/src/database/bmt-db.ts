@@ -108,11 +108,13 @@ export class BmtDb {
         await messages.ensureIndex({ type: "persistent", fields: ['src_chain_order']});
         await messages.ensureIndex({ type: "persistent", fields: ['msg_type', 'dst_chain_order']});
         await messages.ensureIndex({ type: "persistent", fields: ['msg_type', 'src_chain_order']});
+        await messages.ensureIndex({ type: "persistent", fields: ['dst', 'dst_chain_order']});
         await messages.ensureIndex({ type: "persistent", fields: ['dst', 'msg_type', 'dst_chain_order']});
         await messages.ensureIndex({ type: "persistent", fields: ['dst', 'msg_type', 'src', 'dst_chain_order']});
         await messages.ensureIndex({ type: "persistent", fields: ['src', 'src_chain_order']});
         await messages.ensureIndex({ type: "persistent", fields: ['src', 'msg_type', 'src_chain_order']});
         await messages.ensureIndex({ type: "persistent", fields: ['src', 'msg_type', 'dst', 'src_chain_order']});
+        await messages.ensureIndex({ type: "persistent", fields: ['msg_type', 'created_at']});
     }
 }
 
